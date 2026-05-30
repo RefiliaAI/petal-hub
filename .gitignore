@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build output
+out/
+dist/
+*.tsbuildinfo
+
+# logs & local dev artifacts
+*.log
+.devlog.txt
+
+# secrets — never commit tokens, passwords, or local config
+.env
+.env.*
+*.local
+settings.json
+secrets.json
+
+# os cruft
+.DS_Store
+Thumbs.db

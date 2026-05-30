@@ -1,0 +1,71 @@
+/* =========================================================================
+   Petal Hub theme — all the cute lives here. Change these variables to
+   restyle the whole app in one place. 🌸
+   ========================================================================= */
+:root {
+  /* pastel palette */
+  --blush: #ffe3ef;
+  --rose: #ffb6d5;
+  --rose-deep: #ff89bd;
+  --petal: #ffd6e8;
+  --cream: #fff7fb;
+  --lavender: #efe1ff;
+  --mint: #d8f5e6;
+  --text: #6b3a52;
+  --text-soft: #a87a90;
+  --white: #ffffff;
+
+  /* terminal palette (cute but readable on dark) */
+  --term-bg: #2b1b27;
+  --term-fg: #ffe9f3;
+  --term-cursor: #ff89bd;
+  --term-selection: #6b3a52;
+
+  /* shape & depth */
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --shadow-soft: 0 8px 24px rgba(255, 137, 189, 0.25);
+  --shadow-card: 0 4px 16px rgba(214, 123, 168, 0.18);
+  --ring: 0 0 0 3px rgba(255, 137, 189, 0.35);
+
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: linear-gradient(160deg, var(--blush) 0%, var(--cream) 55%, var(--lavender) 100%);
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rose);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
