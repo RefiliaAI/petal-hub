@@ -32,6 +32,12 @@ export interface PublicSettings {
   collaborators: string[]
 }
 
+export interface ProjectMatch {
+  name: string
+  dir: string
+  score: number
+}
+
 export interface TokenInfo {
   ok: boolean
   login?: string

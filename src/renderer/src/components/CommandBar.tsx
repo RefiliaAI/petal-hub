@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { parseIntent, slugify } from '../lib/intent'
 import { fileToImagePayload } from '../lib/images'
-import type { CreateProjectResult } from '../../../preload/index.d'
+import type { CreateProjectResult, ProjectMatch } from '../../../preload/index.d'
 
 interface Attachment {
   name: string
@@ -9,15 +9,23 @@ interface Attachment {
   thumb: string
 }
 
-type Phase = 'compose' | 'confirm' | 'creating' | 'done' | 'error'
+type Phase = 'compose' | 'confirm' | 'creating' | 'done' | 'error' | 'open-confirm' | 'open-none'
 
 interface Props {
   canScaffold: boolean
   projectsRoot: string
   onProjectCreated: (result: CreateProjectResult) => void
+  onOpenProject: (dir: string, title: string) => void
+  onOpenTerminal: () => void
 }
 
-export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Props): JSX.Element {
+export function CommandBar({
+  canScaffold,
+  projectsRoot,
+  onProjectCreated,
+  onOpenProject,
+  onOpenTerminal
+}: Props): JSX.Element {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [phase, setPhase] = useState<Phase>('compose')
@@ -26,7 +34,13 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
   const [description, setDescription] = useState('')
   const [steps, setSteps] = useState<string[]>([])
   const [error, setError] = useState('')
+  // open flow
+  const [openQuery, setOpenQuery] = useState('')
+  const [matches, setMatches] = useState<ProjectMatch[]>([])
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Live intent so the action button reads "Open" vs "Create".
+  const liveKind = parseIntent(text).kind
 
   const addImages = async (files: File[]): Promise<void> => {
     const imgs = files.filter((f) => f.type.startsWith('image/'))
@@ -55,21 +69,31 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
     }
   }
 
-  const submit = (): void => {
+  const submit = async (): Promise<void> => {
     const parsed = parseIntent(text)
-    if (!parsed.isCreate) {
-      setError('Try something like: “create a new project for a recipe sharing app”')
+    if (parsed.kind === 'terminal') {
+      onOpenTerminal()
+      setText('')
+      reset()
+    } else if (parsed.kind === 'create') {
+      setSlug(parsed.slug)
+      setDescription(parsed.description)
+      setError('')
+      setPhase('confirm')
+    } else if (parsed.kind === 'open') {
+      setError('')
+      setOpenQuery(parsed.query)
+      const found = await window.hub.findProject(parsed.query)
+      setMatches(found)
+      setPhase(found.length && found[0].score >= 0.4 ? 'open-confirm' : 'open-none')
+    } else {
+      setError('Try “create a new project for …” or “open <project name>”.')
       setPhase('error')
-      return
     }
-    setSlug(parsed.slug)
-    setDescription(parsed.description)
-    setError('')
-    setPhase('confirm')
   }
 
   const confirmCreate = async (): Promise<void> => {
-    const finalSlug = slugify(slug) // sanitize whatever the user typed
+    const finalSlug = slugify(slug)
     setPhase('creating')
     setSteps(['Working…'])
     try {
@@ -81,7 +105,6 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
       setSteps(result.steps)
       setPhase('done')
       onProjectCreated(result)
-      // Reset compose state for the next project.
       setText('')
       setAttachments([])
     } catch (err: any) {
@@ -90,7 +113,12 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
     }
   }
 
-  // ---------- render helpers ----------
+  const open = (m: ProjectMatch): void => {
+    onOpenProject(m.dir, m.name)
+    setText('')
+    reset()
+  }
+
   const reset = (): void => {
     setPhase('compose')
     setError('')
@@ -111,8 +139,9 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
       <div>
         <h1>🩷 What should we build today?</h1>
         <p className="sub">
-          Describe a project in plain words and I'll set up the folder, git, a public GitHub repo,
-          and open a fresh Claude session for it. Drag screenshots in anytime.
+          Describe a project to <strong>create</strong> it, type{' '}
+          <strong>open &lt;name&gt;</strong> to jump back into an existing one (typos are okay), or
+          just <strong>terminal</strong> for a PowerShell tab. Drag screenshots in anytime.
         </p>
       </div>
 
@@ -123,7 +152,7 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
             className="command-input"
             rows={3}
             autoFocus
-            placeholder="create a new project for a cozy recipe sharing app…"
+            placeholder="create a new project for a cozy recipe app  —  or:  open recipe app"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onPaste={onPaste}
@@ -160,7 +189,7 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
               )}
             </span>
             <button className="btn" onClick={submit} disabled={!text.trim()}>
-              Create 🫧
+              {liveKind === 'terminal' ? 'Terminal 🫧' : liveKind === 'open' ? 'Open 🫧' : 'Create 🫧'}
             </button>
           </div>
         </div>
@@ -206,6 +235,72 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
         </div>
       )}
 
+      {phase === 'open-confirm' && matches.length > 0 && (
+        <div className="confirm-card">
+          <div className="field-label">OPEN EXISTING PROJECT</div>
+          <p className="desc">
+            Did you mean <strong>{matches[0].name}</strong>?
+            {normalizeLoose(openQuery) !== normalizeLoose(matches[0].name) && (
+              <span style={{ color: 'var(--text-soft)' }}> (you typed “{openQuery}”)</span>
+            )}
+          </p>
+          <div className="path-preview">{matches[0].dir}</div>
+
+          {matches.length > 1 && matches.some((m, i) => i > 0 && m.score > 0.2) && (
+            <>
+              <div className="field-label" style={{ marginTop: 12 }}>
+                OR PICK ANOTHER
+              </div>
+              <div className="match-list">
+                {matches
+                  .slice(1)
+                  .filter((m) => m.score > 0.2)
+                  .map((m) => (
+                    <button key={m.dir} className="match-item" onClick={() => open(m)}>
+                      {m.name}
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
+
+          <div className="command-row">
+            <button className="btn ghost" onClick={reset}>
+              ← Back
+            </button>
+            <button className="btn" onClick={() => open(matches[0])}>
+              Open 💮
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === 'open-none' && (
+        <div className="confirm-card">
+          <div className="field-label">NO MATCH FOUND</div>
+          <p className="desc">
+            I couldn't find a project matching “{openQuery}” in{' '}
+            {projectsRoot.replace(/[\\/]$/, '')}.
+          </p>
+          <div className="command-row">
+            <button className="btn ghost" onClick={reset}>
+              ← Back
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setSlug(slugify(openQuery))
+                setDescription(openQuery)
+                setError('')
+                setPhase('confirm')
+              }}
+            >
+              Create “{slugify(openQuery)}” instead
+            </button>
+          </div>
+        </div>
+      )}
+
       {(phase === 'creating' || phase === 'done') && (
         <div className="log">
           {phase === 'creating' && (
@@ -231,4 +326,8 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
       )}
     </div>
   )
+}
+
+function normalizeLoose(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
