@@ -14,7 +14,7 @@
 }
 .app-header .logo {
   font-size: 22px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text);
   letter-spacing: 0.3px;
 }
@@ -446,7 +446,7 @@
   background: var(--cream);
   padding: 16px 0 10px;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text);
 }
 .modal-close {

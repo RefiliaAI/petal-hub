@@ -29,7 +29,7 @@
   --shadow-card: 0 4px 16px rgba(214, 123, 168, 0.18);
   --ring: 0 0 0 3px rgba(255, 137, 189, 0.35);
 
-  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font: 'Quicksand', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
 }
 
