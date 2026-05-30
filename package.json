@@ -1,6 +1,6 @@
 {
   "name": "petal-hub",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A cute pastel-pink command center for running Claude Code across many projects",
   "author": "Petal Hub",
   "main": "./out/main/index.js",
@@ -12,6 +12,7 @@
     "package": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
+    "@fontsource/shantell-sans": "^5.2.7",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "node-pty": "1.2.0-beta.13"

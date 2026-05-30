@@ -26,13 +26,36 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const term = new Terminal({
       fontFamily: "'Cascadia Code', 'Consolas', monospace",
       fontSize: 14,
+      lineHeight: 1.2,
+      letterSpacing: 0.2,
       cursorBlink: true,
       allowProposedApi: true,
+      // Light pastel theme. ANSI colors are tuned to stay legible on a near-white
+      // background; "white"/"brightWhite" are remapped to dark tones so programs
+      // that print white-on-dark text remain readable here.
       theme: {
-        background: '#2b1b27',
-        foreground: '#ffe9f3',
-        cursor: '#ff89bd',
-        selectionBackground: '#6b3a52'
+        background: '#fff7fb',
+        foreground: '#5c3a4d',
+        cursor: '#ff5fa8',
+        cursorAccent: '#fff7fb',
+        selectionBackground: '#ffcfe6',
+        selectionForeground: '#4a2d3d',
+        black: '#5c3a4d',
+        red: '#d6336c',
+        green: '#2f9e6f',
+        yellow: '#b0820a',
+        blue: '#3b6fd4',
+        magenta: '#b5179e',
+        cyan: '#0f8b8d',
+        white: '#9c8090',
+        brightBlack: '#a87a90',
+        brightRed: '#f06595',
+        brightGreen: '#37b979',
+        brightYellow: '#c99a1e',
+        brightBlue: '#5b8def',
+        brightMagenta: '#da77f2',
+        brightCyan: '#1fb6b6',
+        brightWhite: '#4a2d3d'
       }
     })
     const fit = new FitAddon()
