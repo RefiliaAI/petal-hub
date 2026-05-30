@@ -59,11 +59,23 @@ function claudeMd(name: string, description: string, repoUrl: string | null): st
 ## About
 ${description}
 
-## Workflow
-- This project uses **GitHub**. Remote: ${remote}
-- Commit early and often; push to \`origin\`.
-- Use feature branches and open PRs for non-trivial changes.
-- Keep this file up to date as the project's source of truth.
+## Workflow (required for every change)
+This project uses **GitHub** (remote: ${remote}). Follow this branch-based flow for
+**every** change — never commit directly to \`main\`:
+
+1. **Create a branch** for the change and push it to GitHub.
+2. **Ask the user to verify** the change works. Pause and wait for their explicit
+   confirmation — do not merge or release until they approve.
+3. **Only after the user confirms**, in this order:
+   - Bump the version (semver: patch for fixes, minor for features) and rebuild /
+     produce the release artifact, if this project ships one.
+   - Merge the branch into \`main\`.
+   - Delete the now-merged branch.
+   - Publish a **new GitHub release** with the new version tag (attach the build
+     artifact if applicable).
+
+\`main\` must always reflect verified, working code. Keep this file up to date as the
+project's source of truth.
 `
 }
 
