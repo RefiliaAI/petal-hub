@@ -1,10 +1,10 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-// Bundled cute UI font (offline, no CDN — respects the app CSP).
-import '@fontsource/quicksand/400.css'
-import '@fontsource/quicksand/500.css'
-import '@fontsource/quicksand/600.css'
-import '@fontsource/quicksand/700.css'
+// Bundled handwritten UI font (offline, no CDN — respects the app CSP).
+import '@fontsource/shantell-sans/400.css'
+import '@fontsource/shantell-sans/500.css'
+import '@fontsource/shantell-sans/600.css'
+import '@fontsource/shantell-sans/700.css'
 import './styles/theme.css'
 import './styles/app.css'
 import '@xterm/xterm/css/xterm.css'

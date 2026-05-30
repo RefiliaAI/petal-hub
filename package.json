@@ -12,7 +12,7 @@
     "package": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
-    "@fontsource/quicksand": "^5.2.10",
+    "@fontsource/shantell-sans": "^5.2.7",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "node-pty": "1.2.0-beta.13"
