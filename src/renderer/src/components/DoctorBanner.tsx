@@ -16,7 +16,7 @@ export function DoctorBanner({ report }: { report: DoctorReport | null }): JSX.E
     <div className={`doctor ${allOk ? 'ok' : ''}`}>
       <button className="doctor-toggle" onClick={() => setOpen((o) => !o)}>
         {allOk
-          ? '🌸 Everything is ready — git, GitHub & terminals all set.'
+          ? '💮 Everything is ready — git, GitHub & terminals all set.'
           : `⚠️ ${badCount} setup step${badCount > 1 ? 's' : ''} need attention — click to ${
               open ? 'hide' : 'view fixes'
             }`}
