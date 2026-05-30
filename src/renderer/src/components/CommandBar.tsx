@@ -109,7 +109,7 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
       onDrop={onDrop}
     >
       <div>
-        <h1>💖 What should we build today?</h1>
+        <h1>🩷 What should we build today?</h1>
         <p className="sub">
           Describe a project in plain words and I'll set up the folder, git, a public GitHub repo,
           and open a fresh Claude session for it. Drag screenshots in anytime.
@@ -160,7 +160,7 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
               )}
             </span>
             <button className="btn" onClick={submit} disabled={!text.trim()}>
-              Create ✨
+              Create 🫧
             </button>
           </div>
         </div>
@@ -200,7 +200,7 @@ export function CommandBar({ canScaffold, projectsRoot, onProjectCreated }: Prop
               ← Back
             </button>
             <button className="btn" onClick={confirmCreate}>
-              Create it 🌸
+              Create it 💮
             </button>
           </div>
         </div>

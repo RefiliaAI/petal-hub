@@ -18,7 +18,7 @@ export function TabStrip({ tabs, activeId, onSelect, onClose }: Props): JSX.Elem
         className={`tab home ${activeId === 'home' ? 'active' : ''}`}
         onClick={() => onSelect('home')}
       >
-        🌸 Home
+        💮 Home
       </button>
       {tabs.map((t) => (
         <div

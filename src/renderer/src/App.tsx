@@ -49,7 +49,7 @@ export function App(): JSX.Element {
   return (
     <div className="app">
       <header className="app-header">
-        <span className="logo">🌸 Petal Hub</span>
+        <span className="logo">💮 Petal Hub</span>
         <span className="tagline">your cozy Claude Code command center</span>
         <span className="header-spacer" />
         <button className="icon-btn" onClick={() => setShowSettings(true)}>
