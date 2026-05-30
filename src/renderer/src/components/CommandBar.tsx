@@ -16,13 +16,15 @@ interface Props {
   projectsRoot: string
   onProjectCreated: (result: CreateProjectResult) => void
   onOpenProject: (dir: string, title: string) => void
+  onOpenTerminal: () => void
 }
 
 export function CommandBar({
   canScaffold,
   projectsRoot,
   onProjectCreated,
-  onOpenProject
+  onOpenProject,
+  onOpenTerminal
 }: Props): JSX.Element {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -69,7 +71,11 @@ export function CommandBar({
 
   const submit = async (): Promise<void> => {
     const parsed = parseIntent(text)
-    if (parsed.kind === 'create') {
+    if (parsed.kind === 'terminal') {
+      onOpenTerminal()
+      setText('')
+      reset()
+    } else if (parsed.kind === 'create') {
       setSlug(parsed.slug)
       setDescription(parsed.description)
       setError('')
@@ -133,9 +139,9 @@ export function CommandBar({
       <div>
         <h1>🩷 What should we build today?</h1>
         <p className="sub">
-          Describe a project to <strong>create</strong> it, or type{' '}
-          <strong>open &lt;name&gt;</strong> to jump back into an existing one (typos are okay).
-          Drag screenshots in anytime.
+          Describe a project to <strong>create</strong> it, type{' '}
+          <strong>open &lt;name&gt;</strong> to jump back into an existing one (typos are okay), or
+          just <strong>terminal</strong> for a PowerShell tab. Drag screenshots in anytime.
         </p>
       </div>
 
@@ -183,7 +189,7 @@ export function CommandBar({
               )}
             </span>
             <button className="btn" onClick={submit} disabled={!text.trim()}>
-              {liveKind === 'open' ? 'Open 🫧' : 'Create 🫧'}
+              {liveKind === 'terminal' ? 'Terminal 🫧' : liveKind === 'open' ? 'Open 🫧' : 'Create 🫧'}
             </button>
           </div>
         </div>

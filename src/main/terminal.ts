@@ -37,6 +37,25 @@ function resolveClaude(): string {
   return 'claude.cmd'
 }
 
+/** Resolve a PowerShell executable — prefer PowerShell 7 (pwsh), else Windows PowerShell. */
+function resolvePwsh(): string {
+  try {
+    const found = execSync('where pwsh', { windowsHide: true }).toString().split(/\r?\n/)[0]?.trim()
+    if (found && existsSync(found)) return found
+  } catch {
+    /* pwsh not installed */
+  }
+  const winps = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe'
+  )
+  if (existsSync(winps)) return winps
+  return 'powershell.exe'
+}
+
 interface Session {
   id: string
   proc: IPty
@@ -47,14 +66,26 @@ export class TerminalManager {
   private sessions = new Map<string, Session>()
   private seq = 0
   private claudePath = resolveClaude()
+  private pwshPath = resolvePwsh()
 
   constructor(private sender: WebContents) {}
 
+  /** Open a tab running an interactive `claude` session (optionally seeded). */
   spawn(cwd: string, seedPrompt?: string): { id: string } {
+    return this.launch(this.claudePath, [], cwd, seedPrompt)
+  }
+
+  /** Open a tab running a plain PowerShell shell. */
+  spawnShell(cwd: string): { id: string } {
+    const dir = cwd && existsSync(cwd) ? cwd : os.homedir()
+    return this.launch(this.pwshPath, ['-NoLogo'], dir)
+  }
+
+  private launch(file: string, args: string[], cwd: string, seedPrompt?: string): { id: string } {
     const ptyLib = loadPty()
     const id = `tab-${++this.seq}`
 
-    const proc = ptyLib.spawn(this.claudePath, [], {
+    const proc = ptyLib.spawn(file, args, {
       name: 'xterm-color',
       cols: 80,
       rows: 24,

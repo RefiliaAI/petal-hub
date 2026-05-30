@@ -10,6 +10,10 @@ const LEADING_FILLER_RE =
 const OPEN_RE = /^\s*(?:please\s+)?(open|reopen|resume|continue|load|launch|go\s*to|switch\s*to)\b/i
 const OPEN_FILLER_RE = /^\s*(?:the\s+|my\s+|a\s+|an\s+)?(?:existing\s+)?(?:projects?\s+)?(?:called\s+|named\s+)?/i
 
+// "terminal", "open a terminal", "new powershell", "give me a shell", …
+const TERMINAL_RE =
+  /^\s*(?:please\s+)?(?:(?:open|new|start|launch|create|run|give\s+me|spin\s*up)\s+)?(?:a\s+|an\s+|the\s+)?(?:new\s+)?(terminal|power\s*shell|pwsh|shell|command\s*prompt)\b/i
+
 const SLUG_STOPWORDS = new Set([
   'a', 'an', 'the', 'for', 'to', 'of', 'and', 'or', 'with', 'that', 'this',
   'my', 'our', 'app', 'application', 'project', 'called', 'named', 'about',
@@ -30,7 +34,7 @@ export function slugify(text: string): string {
 }
 
 export interface ParsedIntent {
-  kind: 'create' | 'open' | 'unknown'
+  kind: 'create' | 'open' | 'terminal' | 'unknown'
   /** For create: the project description. */
   description: string
   /** For create: kebab-case folder/repo name. */
@@ -41,6 +45,11 @@ export interface ParsedIntent {
 
 export function parseIntent(raw: string): ParsedIntent {
   const text = raw.trim()
+
+  // "terminal" / "open a powershell" — checked first so the keyword wins.
+  if (TERMINAL_RE.test(text)) {
+    return { kind: 'terminal', description: '', slug: '', query: '' }
+  }
 
   // "open <name>" — checked before create so "open project x" isn't mis-read.
   if (OPEN_RE.test(text)) {

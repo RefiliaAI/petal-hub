@@ -31,6 +31,7 @@ const api = {
   // --- terminal tabs ---
   spawnTab: (cwd: string, seedPrompt?: string) =>
     ipcRenderer.invoke('tab:spawn', { cwd, seedPrompt }),
+  spawnTerminal: (cwd: string) => ipcRenderer.invoke('terminal:spawn', { cwd }),
   writeTab: (id: string, data: string) => ipcRenderer.send('tab:write', { id, data }),
   resizeTab: (id: string, cols: number, rows: number) =>
     ipcRenderer.send('tab:resize', { id, cols, rows }),

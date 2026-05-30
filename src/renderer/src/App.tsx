@@ -48,6 +48,16 @@ export function App(): JSX.Element {
     [openTab]
   )
 
+  const handleOpenTerminal = useCallback(async () => {
+    try {
+      const { id } = await window.hub.spawnTerminal(settings?.projectsRoot ?? '')
+      setTabs((t) => [...t, { id, title: '⌨ PowerShell' }])
+      setTimeout(() => setActiveId(id), 150)
+    } catch {
+      /* terminal engine unavailable */
+    }
+  }, [settings])
+
   const closeTab = useCallback(
     (id: string) => {
       window.hub.closeTab(id)
@@ -84,6 +94,7 @@ export function App(): JSX.Element {
             projectsRoot={settings?.projectsRoot ?? 'D:\\Projects'}
             onProjectCreated={handleProjectCreated}
             onOpenProject={handleOpenProject}
+            onOpenTerminal={handleOpenTerminal}
           />
         )}
         {tabs.map((t) => (
