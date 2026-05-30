@@ -15,11 +15,11 @@
   --text-soft: #a87a90;
   --white: #ffffff;
 
-  /* terminal palette (cute but readable on dark) */
-  --term-bg: #2b1b27;
-  --term-fg: #ffe9f3;
-  --term-cursor: #ff89bd;
-  --term-selection: #6b3a52;
+  /* terminal palette (light & pastel, matches the app) */
+  --term-bg: #fff7fb;
+  --term-fg: #5c3a4d;
+  --term-cursor: #ff5fa8;
+  --term-selection: #ffcfe6;
 
   /* shape & depth */
   --radius-lg: 22px;
