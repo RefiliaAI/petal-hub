@@ -29,6 +29,7 @@ export interface PublicSettings {
   githubUser: string
   projectsRoot: string
   repoVisibility: 'public' | 'private'
+  collaborators: string[]
 }
 
 export interface TokenInfo {

@@ -7,7 +7,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { promises as fs, existsSync } from 'fs'
 import path from 'path'
-import { createRepo, storeGitCredential, tokenPush } from './github'
+import { addCollaborator, createRepo, storeGitCredential, tokenPush } from './github'
 
 const exec = promisify(execFile)
 
@@ -23,6 +23,8 @@ export interface ScaffoldOptions {
   login: string
   visibility: 'public' | 'private'
   projectsRoot: string
+  /** GitHub usernames to auto-invite as collaborators on the new repo. */
+  collaborators: string[]
 }
 
 export interface CreateProjectResult {
@@ -160,6 +162,15 @@ export async function createProject(
 
       steps.push(`Created ${opts.visibility} GitHub repo: ${repoUrl}`)
       steps.push('Pushed to origin/main')
+
+      // Invite collaborators (best-effort; one failure won't block the project).
+      for (const username of opts.collaborators) {
+        if (!username.trim()) continue
+        const r = await addCollaborator(opts.token, repo.owner, finalSlug, username.trim())
+        if (r.status === 'invited') steps.push(`Invited @${r.username} as a collaborator`)
+        else if (r.status === 'already') steps.push(`@${r.username} is already a collaborator`)
+        else steps.push(`Could not invite @${r.username}: ${r.detail ?? 'failed'}`)
+      }
     } catch (err: any) {
       steps.push(`GitHub step skipped: ${err?.message ?? 'failed'}`)
     }

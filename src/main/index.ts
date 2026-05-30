@@ -83,7 +83,8 @@ function registerIpc(): void {
       token: s.githubToken,
       login: s.githubUser,
       visibility: s.repoVisibility,
-      projectsRoot: s.projectsRoot
+      projectsRoot: s.projectsRoot,
+      collaborators: s.collaborators ?? []
     })
   })
 

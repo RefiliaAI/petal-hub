@@ -86,6 +86,47 @@ export async function createRepo(
   return { html_url: data.html_url, clone_url: data.clone_url, owner: data.owner.login }
 }
 
+export interface CollaboratorResult {
+  username: string
+  ok: boolean
+  status: 'invited' | 'already' | 'failed'
+  detail?: string
+}
+
+/**
+ * Invite a GitHub user as a collaborator on a repo (defaults to write/push).
+ * 201 = invitation sent, 204 = already a collaborator. Never throws.
+ */
+export async function addCollaborator(
+  token: string,
+  owner: string,
+  repo: string,
+  username: string,
+  permission: 'pull' | 'triage' | 'push' | 'maintain' | 'admin' = 'push'
+): Promise<CollaboratorResult> {
+  try {
+    const res = await fetch(
+      `${API}/repos/${owner}/${repo}/collaborators/${encodeURIComponent(username)}`,
+      {
+        method: 'PUT',
+        headers: { ...headers(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permission })
+      }
+    )
+    if (res.status === 201) return { username, ok: true, status: 'invited' }
+    if (res.status === 204) return { username, ok: true, status: 'already' }
+    const body = await res.text().catch(() => '')
+    return {
+      username,
+      ok: false,
+      status: 'failed',
+      detail: `${res.status} ${res.statusText}${body ? ': ' + body.slice(0, 120) : ''}`
+    }
+  } catch (err: any) {
+    return { username, ok: false, status: 'failed', detail: err?.message ?? 'network error' }
+  }
+}
+
 /**
  * Register the token with git's credential helper for github.com so future
  * `git push`es authenticate without prompting. Best-effort; never throws.

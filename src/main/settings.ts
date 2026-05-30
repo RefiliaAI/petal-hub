@@ -12,13 +12,16 @@ export interface Settings {
   githubUser: string
   projectsRoot: string
   repoVisibility: 'public' | 'private'
+  /** GitHub usernames auto-invited as collaborators on every new repo. */
+  collaborators: string[]
 }
 
 const DEFAULTS: Settings = {
   githubToken: '',
   githubUser: '',
   projectsRoot: 'D:\\Projects',
-  repoVisibility: 'public'
+  repoVisibility: 'public',
+  collaborators: []
 }
 
 /** A renderer-safe view of settings — the token is never sent back in full. */
@@ -28,6 +31,7 @@ export interface PublicSettings {
   githubUser: string
   projectsRoot: string
   repoVisibility: 'public' | 'private'
+  collaborators: string[]
 }
 
 function file(): string {
@@ -58,6 +62,7 @@ export function toPublic(s: Settings = loadSettingsSync()): PublicSettings {
     tokenMasked: s.githubToken ? '••••••••' + s.githubToken.slice(-4) : '',
     githubUser: s.githubUser,
     projectsRoot: s.projectsRoot,
-    repoVisibility: s.repoVisibility
+    repoVisibility: s.repoVisibility,
+    collaborators: s.collaborators ?? []
   }
 }
