@@ -11,6 +11,7 @@ const api = {
   // --- projects ---
   createProject: (input: { slug: string; description: string; images?: string[] }) =>
     ipcRenderer.invoke('project:create', input),
+  findProject: (query: string) => ipcRenderer.invoke('project:find', query),
 
   // --- settings & github ---
   getSettings: () => ipcRenderer.invoke('settings:get'),

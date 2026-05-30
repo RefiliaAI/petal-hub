@@ -21,17 +21,32 @@ export function App(): JSX.Element {
   // Run the environment doctor + load settings on launch.
   useEffect(refreshEnv, [refreshEnv])
 
-  const handleProjectCreated = useCallback(async (result: CreateProjectResult) => {
+  const openTab = useCallback(async (dir: string, title: string, seed?: string, delay = 500) => {
     try {
-      const { id } = await window.hub.spawnTab(result.projectDir, result.seedPrompt)
-      setTabs((t) => [...t, { id, title: result.slug }])
-      // Small delay so the success log is briefly visible before we switch.
-      setTimeout(() => setActiveId(id), 600)
-    } catch (err) {
+      const { id } = await window.hub.spawnTab(dir, seed)
+      setTabs((t) => [...t, { id, title }])
+      // Small delay so any success log is briefly visible before we switch.
+      setTimeout(() => setActiveId(id), delay)
+    } catch {
       // If terminals can't spawn, at least let the user open the folder.
-      window.hub.openPath(result.projectDir)
+      window.hub.openPath(dir)
     }
   }, [])
+
+  const handleProjectCreated = useCallback(
+    (result: CreateProjectResult) => openTab(result.projectDir, result.slug, result.seedPrompt, 600),
+    [openTab]
+  )
+
+  const handleOpenProject = useCallback(
+    (dir: string, title: string) => {
+      const seed =
+        `I'm resuming the "${title}" project. Read CLAUDE.md to refresh context, then give me a ` +
+        `short summary of where things stand and suggest next steps.`
+      openTab(dir, title, seed, 200)
+    },
+    [openTab]
+  )
 
   const closeTab = useCallback(
     (id: string) => {
@@ -68,6 +83,7 @@ export function App(): JSX.Element {
             canScaffold={report?.canScaffold ?? true}
             projectsRoot={settings?.projectsRoot ?? 'D:\\Projects'}
             onProjectCreated={handleProjectCreated}
+            onOpenProject={handleOpenProject}
           />
         )}
         {tabs.map((t) => (

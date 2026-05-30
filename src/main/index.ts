@@ -7,6 +7,7 @@ import { createProject } from './scaffolder'
 import { TerminalManager } from './terminal'
 import { loadSettingsSync, saveSettings, toPublic, type Settings } from './settings'
 import { validateToken, storeGitCredential } from './github'
+import { findProjects } from './projects'
 
 let mainWindow: BrowserWindow | null = null
 let terminals: TerminalManager | null = null
@@ -114,6 +115,11 @@ function registerIpc(): void {
   ipcMain.handle('github:test', async () => {
     const s = loadSettingsSync()
     return validateToken(s.githubToken)
+  })
+
+  ipcMain.handle('project:find', (_e, query: string) => {
+    const s = loadSettingsSync()
+    return findProjects(s.projectsRoot, query)
   })
 
   ipcMain.handle('tab:spawn', (_e, { cwd, seedPrompt }) => {

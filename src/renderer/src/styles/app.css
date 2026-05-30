@@ -316,6 +316,29 @@
   margin: 8px 0 0;
 }
 
+/* alternative matches for "open …" */
+.match-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.match-item {
+  background: var(--blush);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 99px;
+  transition: filter 0.15s, transform 0.1s;
+}
+.match-item:hover {
+  filter: brightness(0.97);
+}
+.match-item:active {
+  transform: scale(0.97);
+}
+
 /* progress log */
 .log {
   width: min(620px, 92%);
