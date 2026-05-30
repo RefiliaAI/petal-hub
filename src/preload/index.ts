@@ -14,8 +14,11 @@ const api = {
 
   // --- settings & github ---
   getSettings: () => ipcRenderer.invoke('settings:get'),
-  setSettings: (patch: { projectsRoot?: string; repoVisibility?: 'public' | 'private' }) =>
-    ipcRenderer.invoke('settings:set', patch),
+  setSettings: (patch: {
+    projectsRoot?: string
+    repoVisibility?: 'public' | 'private'
+    collaborators?: string[]
+  }) => ipcRenderer.invoke('settings:set', patch),
   saveToken: (token: string) => ipcRenderer.invoke('settings:save-token', token),
   clearToken: () => ipcRenderer.invoke('settings:clear-token'),
   testGitHub: () => ipcRenderer.invoke('github:test'),

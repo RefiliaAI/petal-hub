@@ -9,13 +9,28 @@ interface Props {
 export function SettingsPanel({ onClose, onChanged }: Props): JSX.Element {
   const [settings, setSettings] = useState<PublicSettings | null>(null)
   const [token, setToken] = useState('')
+  const [collabText, setCollabText] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<{ kind: 'ok' | 'err' | 'info'; text: string } | null>(null)
 
   const refresh = (): void => {
-    window.hub.getSettings().then(setSettings)
+    window.hub.getSettings().then((s) => {
+      setSettings(s)
+      setCollabText((s.collaborators ?? []).join(', '))
+    })
   }
   useEffect(refresh, [])
+
+  const saveCollaborators = async (text: string): Promise<void> => {
+    const list = text
+      .split(',')
+      .map((x) => x.trim().replace(/^@/, ''))
+      .filter(Boolean)
+    const s = await window.hub.setSettings({ collaborators: list })
+    setSettings(s)
+    setCollabText((s.collaborators ?? []).join(', '))
+    onChanged()
+  }
 
   const saveToken = async (): Promise<void> => {
     if (!token.trim()) return
@@ -173,6 +188,25 @@ export function SettingsPanel({ onClose, onChanged }: Props): JSX.Element {
             }}
           />
           <p className="hint">New projects are created here, each as its own git repo.</p>
+        </div>
+
+        <div className="settings-section">
+          <div className="field-label">AUTO-INVITE COLLABORATORS</div>
+          <input
+            className="name-input"
+            placeholder="github-username, another-user"
+            value={collabText}
+            spellCheck={false}
+            onChange={(e) => setCollabText(e.target.value)}
+            onBlur={(e) => saveCollaborators(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
+          <p className="hint">
+            Comma-separated GitHub usernames invited (write access) to every new repo the hub
+            creates. Stored only on this machine.
+          </p>
         </div>
       </div>
     </div>

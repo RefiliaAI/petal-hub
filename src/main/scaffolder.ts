@@ -7,7 +7,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { promises as fs, existsSync } from 'fs'
 import path from 'path'
-import { createRepo, storeGitCredential, tokenPush } from './github'
+import { addCollaborator, createRepo, storeGitCredential, tokenPush } from './github'
 
 const exec = promisify(execFile)
 
@@ -23,6 +23,8 @@ export interface ScaffoldOptions {
   login: string
   visibility: 'public' | 'private'
   projectsRoot: string
+  /** GitHub usernames to auto-invite as collaborators on the new repo. */
+  collaborators: string[]
 }
 
 export interface CreateProjectResult {
@@ -59,11 +61,23 @@ function claudeMd(name: string, description: string, repoUrl: string | null): st
 ## About
 ${description}
 
-## Workflow
-- This project uses **GitHub**. Remote: ${remote}
-- Commit early and often; push to \`origin\`.
-- Use feature branches and open PRs for non-trivial changes.
-- Keep this file up to date as the project's source of truth.
+## Workflow (required for every change)
+This project uses **GitHub** (remote: ${remote}). Follow this branch-based flow for
+**every** change — never commit directly to \`main\`:
+
+1. **Create a branch** for the change and push it to GitHub.
+2. **Ask the user to verify** the change works. Pause and wait for their explicit
+   confirmation — do not merge or release until they approve.
+3. **Only after the user confirms**, in this order:
+   - Bump the version (semver: patch for fixes, minor for features) and rebuild /
+     produce the release artifact, if this project ships one.
+   - Merge the branch into \`main\`.
+   - Delete the now-merged branch.
+   - Publish a **new GitHub release** with the new version tag (attach the build
+     artifact if applicable).
+
+\`main\` must always reflect verified, working code. Keep this file up to date as the
+project's source of truth.
 `
 }
 
@@ -148,6 +162,15 @@ export async function createProject(
 
       steps.push(`Created ${opts.visibility} GitHub repo: ${repoUrl}`)
       steps.push('Pushed to origin/main')
+
+      // Invite collaborators (best-effort; one failure won't block the project).
+      for (const username of opts.collaborators) {
+        if (!username.trim()) continue
+        const r = await addCollaborator(opts.token, repo.owner, finalSlug, username.trim())
+        if (r.status === 'invited') steps.push(`Invited @${r.username} as a collaborator`)
+        else if (r.status === 'already') steps.push(`@${r.username} is already a collaborator`)
+        else steps.push(`Could not invite @${r.username}: ${r.detail ?? 'failed'}`)
+      }
     } catch (err: any) {
       steps.push(`GitHub step skipped: ${err?.message ?? 'failed'}`)
     }
