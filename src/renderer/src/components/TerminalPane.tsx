@@ -8,13 +8,15 @@ interface Props {
   id: string
   active: boolean
   onExit: (id: string) => void
+  /** 'claude' draws its own cursor, so we hide xterm's; 'shell' keeps the real cursor. */
+  kind?: 'claude' | 'shell'
 }
 
 /**
  * One embedded `claude` session. Stays mounted (just hidden) when inactive so
  * the session keeps running and scrollback is preserved.
  */
-export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
+export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JSX.Element {
   const mountRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -29,7 +31,7 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       fontSize: 14,
       lineHeight: 1.2,
       letterSpacing: 0.2,
-      cursorBlink: true,
+      cursorBlink: kind === 'shell',
       allowProposedApi: true,
       // Light pastel theme. ANSI colors are tuned to stay legible on a near-white
       // background; "white"/"brightWhite" are remapped to dark tones so programs
@@ -37,8 +39,12 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       theme: {
         background: '#fff7fb',
         foreground: '#5c3a4d',
-        cursor: '#ff5fa8',
-        cursorAccent: '#fff7fb',
+        // claude (the TUI) draws its own block cursor and leaves the real terminal
+        // cursor parked at the wrong spot, so we hide xterm's cursor for claude tabs
+        // (transparent block, foreground accent so the underlying char stays normal).
+        // Shell tabs keep the real pink cursor.
+        cursor: kind === 'shell' ? '#ff5fa8' : 'transparent',
+        cursorAccent: kind === 'shell' ? '#fff7fb' : '#5c3a4d',
         selectionBackground: '#ffcfe6',
         selectionForeground: '#4a2d3d',
         black: '#5c3a4d',

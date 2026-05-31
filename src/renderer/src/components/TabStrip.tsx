@@ -2,6 +2,8 @@ export interface TabInfo {
   id: string
   title: string
   dead?: boolean
+  /** 'claude' tabs run the TUI (which draws its own cursor); 'shell' tabs are a raw PowerShell. */
+  kind?: 'claude' | 'shell'
 }
 
 interface Props {
