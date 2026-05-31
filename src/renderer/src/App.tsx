@@ -4,6 +4,7 @@ import { TabStrip, type TabInfo } from './components/TabStrip'
 import { TerminalPane } from './components/TerminalPane'
 import { CommandBar } from './components/CommandBar'
 import { SettingsPanel } from './components/SettingsPanel'
+import { VersionFooter } from './components/VersionFooter'
 import type { CreateProjectResult, DoctorReport, PublicSettings } from '../../preload/index.d'
 
 export function App(): JSX.Element {
@@ -121,6 +122,8 @@ export function App(): JSX.Element {
       {showSettings && (
         <SettingsPanel onClose={() => setShowSettings(false)} onChanged={refreshEnv} />
       )}
+
+      <VersionFooter />
     </div>
   )
 }
