@@ -24,7 +24,7 @@ export function App(): JSX.Element {
   const openTab = useCallback(async (dir: string, title: string, seed?: string, delay = 500) => {
     try {
       const { id } = await window.hub.spawnTab(dir, seed)
-      setTabs((t) => [...t, { id, title }])
+      setTabs((t) => [...t, { id, title, kind: 'claude' }])
       // Small delay so any success log is briefly visible before we switch.
       setTimeout(() => setActiveId(id), delay)
     } catch {
@@ -51,7 +51,7 @@ export function App(): JSX.Element {
   const handleOpenTerminal = useCallback(async () => {
     try {
       const { id } = await window.hub.spawnTerminal(settings?.projectsRoot ?? '')
-      setTabs((t) => [...t, { id, title: '⌨ PowerShell' }])
+      setTabs((t) => [...t, { id, title: '⌨ PowerShell', kind: 'shell' }])
       setTimeout(() => setActiveId(id), 150)
     } catch {
       /* terminal engine unavailable */
@@ -98,7 +98,13 @@ export function App(): JSX.Element {
           />
         )}
         {tabs.map((t) => (
-          <TerminalPane key={t.id} id={t.id} active={activeId === t.id} onExit={markDead} />
+          <TerminalPane
+            key={t.id}
+            id={t.id}
+            kind={t.kind ?? 'claude'}
+            active={activeId === t.id}
+            onExit={markDead}
+          />
         ))}
       </div>
 

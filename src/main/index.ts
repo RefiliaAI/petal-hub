@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, clipboard } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import os from 'os'
@@ -137,6 +137,9 @@ function registerIpc(): void {
   ipcMain.on('tab:close', (_e, { id }) => terminals?.close(id))
   ipcMain.on('shell:open-path', (_e, p: string) => shell.openPath(p))
   ipcMain.on('shell:open-external', (_e, url: string) => shell.openExternal(url))
+
+  // --- clipboard (copy; paste uses the browser's native paste event) ---
+  ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
 }
 
 app.whenReady().then(() => {
