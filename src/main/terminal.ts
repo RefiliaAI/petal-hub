@@ -8,6 +8,7 @@ import { existsSync } from 'fs'
 import path from 'path'
 import os from 'os'
 import type { WebContents } from 'electron'
+import { hasClaudeHistory } from './history'
 
 // Lazy import so the app still launches if the native module failed to load.
 // node-pty ships N-API prebuilds (ABI-stable across Node & Electron) so no
@@ -90,6 +91,19 @@ export class TerminalManager {
   /** Open a tab running an interactive `claude` session (optionally seeded). */
   spawn(cwd: string, seedPrompt?: string): { id: string } {
     return this.launch(this.claudePath, [], cwd, seedPrompt)
+  }
+
+  /**
+   * Open a project tab, resuming the previous conversation when one exists.
+   * If Claude has saved history for this directory we launch `claude --continue`
+   * (which restores the real prior session); otherwise we fall back to a fresh
+   * seeded session so first-time opens still get a helpful kickoff prompt.
+   */
+  spawnResume(cwd: string, fallbackSeed?: string): { id: string } {
+    if (hasClaudeHistory(cwd)) {
+      return this.launch(this.claudePath, ['--continue'], cwd)
+    }
+    return this.launch(this.claudePath, [], cwd, fallbackSeed)
   }
 
   /** Open a tab running a plain PowerShell shell. */
