@@ -62,43 +62,154 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     term.loadAddon(fit)
     term.open(mountRef.current)
 
-    // Standard clipboard shortcuts. xterm doesn't wire these up itself, so the
-    // raw keystrokes would otherwise reach the pty (e.g. Ctrl+V as a control char).
-    // Returning false tells xterm we handled the event and to swallow it.
+    // ---- Keyboard text selection (a copy-style highlight, not editing) ----
+    // xterm has no built-in keyboard selection — its model is mouse-only — so we
+    // track an anchor/focus pair as linear cell offsets (row * cols + col) and drive
+    // term.select(). The pty's own cursor is untouched; this only highlights cells
+    // for copying. Kept as closure locals so the key handler below shares the state.
+    let anchor: number | null = null
+    let focus: number | null = null
+
+    const cols = (): number => term.cols
+    const maxOffset = (): number => term.buffer.active.length * term.cols
+    const clampOff = (o: number): number => Math.max(0, Math.min(o, maxOffset()))
+    const cursorOffset = (): number => {
+      const b = term.buffer.active
+      return (b.baseY + b.cursorY) * term.cols + b.cursorX
+    }
+    const rowText = (row: number): string =>
+      term.buffer.active.getLine(row)?.translateToString(false) ?? ''
+    const isWordChar = (ch: string): boolean => /\S/.test(ch)
+
+    const ensureVisible = (off: number): void => {
+      try {
+        const row = Math.floor(off / cols())
+        const top = term.buffer.active.viewportY
+        if (row < top) term.scrollToLine(row)
+        else if (row >= top + term.rows) term.scrollToLine(row - term.rows + 1)
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const renderSelection = (): void => {
+      if (anchor === null || focus === null || anchor === focus) {
+        term.clearSelection()
+        return
+      }
+      const start = Math.min(anchor, focus)
+      const len = Math.abs(focus - anchor)
+      term.select(start % cols(), Math.floor(start / cols()), len)
+      ensureVisible(focus)
+    }
+
+    // Next word boundary to the right of the given offset (used by Ctrl+Shift+→).
+    const wordRight = (off: number): number => {
+      const c = cols()
+      const row = Math.floor(off / c)
+      const startCol = off % c
+      if (startCol >= c) return clampOff((row + 1) * c)
+      const text = rowText(row)
+      let col = startCol
+      while (col < c && !isWordChar(text[col] ?? ' ')) col++
+      while (col < c && isWordChar(text[col] ?? ' ')) col++
+      if (col === startCol) return clampOff((row + 1) * c)
+      return clampOff(row * c + col)
+    }
+
+    // Previous word boundary to the left of the given offset (used by Ctrl+Shift+←).
+    const wordLeft = (off: number): number => {
+      const c = cols()
+      const row = Math.floor(off / c)
+      const startCol = off % c
+      if (startCol === 0) return row === 0 ? 0 : clampOff((row - 1) * c + c)
+      const text = rowText(row)
+      let col = startCol - 1
+      while (col > 0 && !isWordChar(text[col] ?? ' ')) col--
+      while (col > 0 && isWordChar(text[col - 1] ?? ' ')) col--
+      return clampOff(row * c + col)
+    }
+
+    // Ctrl+A: highlight the whole current line, spanning wrapped continuation rows.
+    const selectWholeLine = (): void => {
+      const b = term.buffer.active
+      const c = cols()
+      let startRow = b.baseY + b.cursorY
+      let endRow = startRow
+      while (startRow > 0 && b.getLine(startRow)?.isWrapped) startRow--
+      while (endRow + 1 < b.length && b.getLine(endRow + 1)?.isWrapped) endRow++
+      anchor = startRow * c
+      focus = (endRow + 1) * c
+      renderSelection()
+    }
+
+    const clearSel = (): void => {
+      anchor = null
+      focus = null
+      term.clearSelection()
+    }
+
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== 'keydown' || !e.ctrlKey) return true
-      const key = e.key.toLowerCase()
+      if (e.type !== 'keydown') return true
+      const key = e.key
+      const lower = key.toLowerCase()
+      const isArrow =
+        key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown'
 
-      // Paste: Ctrl+V or Ctrl+Shift+V. xterm would normally send ^V as a control
-      // char and preventDefault, which suppresses the browser's native paste.
-      // Returning false skips that, letting the native paste feed the pty exactly
-      // once — don't paste manually here too, or it pastes twice.
-      if (key === 'v') {
+      // Shift+Arrow extends the selection; add Ctrl to move by whole words.
+      if (e.shiftKey && isArrow) {
+        if (anchor === null) anchor = cursorOffset()
+        let f = focus ?? anchor
+        const c = cols()
+        if (key === 'ArrowRight') f = e.ctrlKey ? wordRight(f) : clampOff(f + 1)
+        else if (key === 'ArrowLeft') f = e.ctrlKey ? wordLeft(f) : clampOff(f - 1)
+        else if (key === 'ArrowDown') f = clampOff(f + c)
+        else f = clampOff(f - c)
+        focus = f
+        renderSelection()
         return false
       }
 
-      // Copy: Ctrl+Shift+C always copies the selection; plain Ctrl+C copies only
-      // when something is selected, otherwise it passes through as interrupt (SIGINT).
-      if (key === 'c') {
-        const sel = term.getSelection()
-        if (e.shiftKey) {
-          if (sel) window.hub.writeClipboard(sel)
+      if (e.ctrlKey) {
+        // Ctrl+A: select the whole current line.
+        if (lower === 'a' && !e.shiftKey) {
+          selectWholeLine()
           return false
         }
-        if (sel) {
-          window.hub.writeClipboard(sel)
-          term.clearSelection()
+        // Ctrl+Shift+A: select the entire buffer.
+        if (lower === 'a' && e.shiftKey) {
+          term.selectAll()
+          anchor = focus = null
           return false
         }
-        return true
+        // Ctrl+V / Ctrl+Shift+V: xterm would send ^V and preventDefault, suppressing
+        // the browser's native paste. Returning false lets that native paste feed the
+        // pty exactly once — don't paste manually too, or it pastes twice.
+        if (lower === 'v') {
+          clearSel()
+          return false
+        }
+        // Ctrl+Shift+C always copies the selection; plain Ctrl+C copies when something
+        // is selected, otherwise it passes through as interrupt (SIGINT).
+        if (lower === 'c') {
+          const sel = term.getSelection()
+          if (sel && (e.shiftKey || sel.length > 0)) {
+            window.hub.writeClipboard(sel)
+            clearSel()
+            return false
+          }
+          if (e.shiftKey) return false
+          return true
+        }
       }
 
-      // Select all: Ctrl+Shift+A.
-      if (e.shiftKey && key === 'a') {
-        term.selectAll()
-        return false
+      // Any other keystroke cancels a stale keyboard selection and is passed to the
+      // pty — but ignore lone modifiers and shifted keys so the selection above can
+      // keep extending across repeated Shift+Arrow presses.
+      if (anchor !== null) {
+        const mod = key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta'
+        if (!mod && !e.shiftKey) clearSel()
       }
-
       return true
     })
     try {
