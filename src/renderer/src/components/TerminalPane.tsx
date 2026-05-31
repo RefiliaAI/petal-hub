@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { fileToImagePayload } from '../lib/images'
+import {
+  clampOffset,
+  extractText,
+  getVisibleCursor,
+  lineSelection,
+  wordLeft,
+  wordRight,
+  type TermGrid
+} from '../lib/terminalSelection'
 
 interface Props {
   id: string
@@ -63,47 +72,33 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     term.open(mountRef.current)
 
     // ---- Keyboard text selection (a copy-style highlight, not editing) ----
-    // xterm has no built-in keyboard selection — its model is mouse-only — so we
-    // track an anchor/focus pair as linear cell offsets (row * cols + col) and drive
-    // term.select(). The pty's own cursor is untouched; this only highlights cells
-    // for copying. Kept as closure locals so the key handler below shares the state.
+    // xterm has no built-in keyboard selection — its model is mouse-only — so we track
+    // an anchor/focus pair as linear cell offsets and drive term.select(). The pty's
+    // own cursor is untouched; this only highlights cells for copying. The offset math
+    // lives in ../lib/terminalSelection (pure + unit-tested); here we just adapt the
+    // live xterm buffer to its TermGrid view and hold the anchor/focus state.
     let anchor: number | null = null
     let focus: number | null = null
-    // We extract selected text ourselves (trimming per-row padding) rather than
-    // relying on term.getSelection(), which can return empty after a programmatic
-    // term.select() call in some xterm versions.
+    // We extract selected text ourselves (trimming per-row padding) rather than relying
+    // on term.getSelection(), which can return empty after a programmatic term.select().
     let selectedText = ''
 
     const cols = (): number => term.cols
-    const maxOffset = (): number => term.buffer.active.length * term.cols
-    const clampOff = (o: number): number => Math.max(0, Math.min(o, maxOffset()))
-
-    // Tracked cursor: updated after every term.write() (synchronous) so that when a
-    // Shift+Arrow fires, we use the freshest cursor position rather than b.cursorX
-    // which can be stale if pty output is still buffered in the IPC pipe.
-    let trackedCursorX = 0
-    let trackedCursorY = 0
-    const cursorOffset = (): number => trackedCursorY * term.cols + trackedCursorX
-
-    const rowText = (row: number): string =>
-      term.buffer.active.getLine(row)?.translateToString(false) ?? ''
-    const isWordChar = (ch: string): boolean => /\S/.test(ch)
-
-    // Read text between two buffer offsets, trimming trailing spaces from each row
-    // so we never copy the blank cell-padding xterm adds to the right of every line.
-    const extractText = (start: number, end: number): string => {
-      const c = cols()
-      const startRow = Math.floor(start / c)
-      const startCol = start % c
-      const endRow = Math.floor(end / c)
-      const endCol = end % c
-      if (startRow === endRow) {
-        return rowText(startRow).substring(startCol, endCol).trimEnd()
+    const grid = (): TermGrid => {
+      const b = term.buffer.active
+      return {
+        cols: term.cols,
+        rows: term.rows,
+        baseY: b.baseY,
+        length: b.length,
+        realCursor: { col: b.cursorX, row: b.baseY + b.cursorY },
+        rowText: (row) => b.getLine(row)?.translateToString(false) ?? '',
+        isInverse: (row, col) => !!b.getLine(row)?.getCell(col)?.isInverse()
       }
-      const parts = [rowText(startRow).substring(startCol).trimEnd()]
-      for (let r = startRow + 1; r < endRow; r++) parts.push(rowText(r).trimEnd())
-      parts.push(rowText(endRow).substring(0, endCol).trimEnd())
-      return parts.join('\n')
+    }
+    const cursorOffset = (): number => {
+      const { col, row } = getVisibleCursor(grid())
+      return row * term.cols + col
     }
 
     const ensureVisible = (off: number): void => {
@@ -126,59 +121,15 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       const start = Math.min(anchor, focus)
       const end = Math.max(anchor, focus)
       term.select(start % cols(), Math.floor(start / cols()), end - start)
-      selectedText = extractText(start, end)
+      selectedText = extractText(grid(), start, end)
       ensureVisible(focus)
     }
 
-    // Next word boundary to the right of the given offset (used by Ctrl+Shift+→).
-    const wordRight = (off: number): number => {
-      const c = cols()
-      const row = Math.floor(off / c)
-      const startCol = off % c
-      if (startCol >= c) return clampOff((row + 1) * c)
-      const text = rowText(row)
-      let col = startCol
-      while (col < c && !isWordChar(text[col] ?? ' ')) col++
-      while (col < c && isWordChar(text[col] ?? ' ')) col++
-      if (col === startCol) return clampOff((row + 1) * c)
-      return clampOff(row * c + col)
-    }
-
-    // Previous word boundary to the left of the given offset (used by Ctrl+Shift+←).
-    const wordLeft = (off: number): number => {
-      const c = cols()
-      const row = Math.floor(off / c)
-      const startCol = off % c
-      if (startCol === 0) return row === 0 ? 0 : clampOff((row - 1) * c + c)
-      const text = rowText(row)
-      let col = startCol - 1
-      while (col > 0 && !isWordChar(text[col] ?? ' ')) col--
-      while (col > 0 && isWordChar(text[col - 1] ?? ' ')) col--
-      return clampOff(row * c + col)
-    }
-
-    // Ctrl+A: select the typed content on the cursor's row, skipping any leading
-    // prompt chars (e.g. '> ' from the claude TUI, '$ '/'# ' from shells) and
-    // trailing spaces.
+    // Ctrl+A: select the typed content on the visible cursor's row.
     const selectWholeLine = (): void => {
-      const c = cols()
-      const row = trackedCursorY
-      const text = rowText(row)
-
-      // End: last non-space character on the row.
-      let end = c
-      while (end > 0 && (text[end - 1] ?? ' ') === ' ') end--
-
-      // Start: skip any leading prompt marker (last one before the cursor column).
-      let start = 0
-      for (const marker of ['> ', '$ ', '# ']) {
-        const idx = text.lastIndexOf(marker, trackedCursorX)
-        if (idx >= 0) start = Math.max(start, idx + marker.length)
-      }
-      if (start > end) start = end
-
-      anchor = row * c + start
-      focus = row * c + end
+      const sel = lineSelection(grid())
+      anchor = sel.anchor
+      focus = sel.focus
       renderSelection()
     }
 
@@ -198,13 +149,14 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
 
       // Shift+Arrow extends the selection; add Ctrl to move by whole words.
       if (e.shiftKey && isArrow) {
+        const g = grid()
         if (anchor === null) anchor = cursorOffset()
         let f = focus ?? anchor
         const c = cols()
-        if (key === 'ArrowRight') f = e.ctrlKey ? wordRight(f) : clampOff(f + 1)
-        else if (key === 'ArrowLeft') f = e.ctrlKey ? wordLeft(f) : clampOff(f - 1)
-        else if (key === 'ArrowDown') f = clampOff(f + c)
-        else f = clampOff(f - c)
+        if (key === 'ArrowRight') f = e.ctrlKey ? wordRight(g, f) : clampOffset(g, f + 1)
+        else if (key === 'ArrowLeft') f = e.ctrlKey ? wordLeft(g, f) : clampOffset(g, f - 1)
+        else if (key === 'ArrowDown') f = clampOffset(g, f + c)
+        else f = clampOffset(g, f - c)
         focus = f
         renderSelection()
         return false
@@ -252,17 +204,6 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
         if (!mod && !e.shiftKey) clearSel()
       }
 
-      // Plain arrow navigation goes to the pty, which echoes back the new cursor
-      // position asynchronously. If the user presses Shift+Arrow before the echo
-      // arrives, trackedCursorX is stale and the anchor lands in the wrong spot.
-      // Preemptively adjust the tracker by ±1 so it's correct immediately; the pty
-      // echo in onTabData will confirm (or correct) the position.
-      if (isArrow && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-        const c = cols()
-        if (key === 'ArrowLeft') trackedCursorX = Math.max(0, trackedCursorX - 1)
-        else if (key === 'ArrowRight') trackedCursorX = Math.min(c - 1, trackedCursorX + 1)
-      }
-
       return true
     })
     try {
@@ -277,12 +218,7 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const keySub = term.onData((data) => window.hub.writeTab(id, data))
     // pty output → UI.
     const offData = window.hub.onTabData(({ id: tid, data }) => {
-      if (tid !== id) return
-      term.write(data)
-      // term.write() is synchronous — cursor is updated immediately after.
-      const b = term.buffer.active
-      trackedCursorX = b.cursorX
-      trackedCursorY = b.baseY + b.cursorY
+      if (tid === id) term.write(data)
     })
     const offExit = window.hub.onTabExit(({ id: tid }) => {
       if (tid === id) {
