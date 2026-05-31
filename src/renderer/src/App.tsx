@@ -21,17 +21,24 @@ export function App(): JSX.Element {
   // Run the environment doctor + load settings on launch.
   useEffect(refreshEnv, [refreshEnv])
 
-  const openTab = useCallback(async (dir: string, title: string, seed?: string, delay = 500) => {
-    try {
-      const { id } = await window.hub.spawnTab(dir, seed)
-      setTabs((t) => [...t, { id, title, kind: 'claude' }])
-      // Small delay so any success log is briefly visible before we switch.
-      setTimeout(() => setActiveId(id), delay)
-    } catch {
-      // If terminals can't spawn, at least let the user open the folder.
-      window.hub.openPath(dir)
-    }
-  }, [])
+  const openTab = useCallback(
+    async (dir: string, title: string, seed?: string, delay = 500, resume = false) => {
+      try {
+        // "resume" reopens the previous conversation (claude --continue) when one
+        // exists, falling back to a fresh seeded session; otherwise spawn fresh.
+        const { id } = resume
+          ? await window.hub.resumeTab(dir, seed)
+          : await window.hub.spawnTab(dir, seed)
+        setTabs((t) => [...t, { id, title, kind: 'claude' }])
+        // Small delay so any success log is briefly visible before we switch.
+        setTimeout(() => setActiveId(id), delay)
+      } catch {
+        // If terminals can't spawn, at least let the user open the folder.
+        window.hub.openPath(dir)
+      }
+    },
+    []
+  )
 
   const handleProjectCreated = useCallback(
     (result: CreateProjectResult) => openTab(result.projectDir, result.slug, result.seedPrompt, 600),
@@ -40,10 +47,13 @@ export function App(): JSX.Element {
 
   const handleOpenProject = useCallback(
     (dir: string, title: string) => {
+      // Fallback seed used only when the project has no prior conversation to
+      // continue (first-time open). When history exists, claude --continue picks
+      // up the real previous session and this seed is ignored.
       const seed =
         `I'm resuming the "${title}" project. Read CLAUDE.md to refresh context, then give me a ` +
         `short summary of where things stand and suggest next steps.`
-      openTab(dir, title, seed, 200)
+      openTab(dir, title, seed, 200, true)
     },
     [openTab]
   )

@@ -127,6 +127,11 @@ function registerIpc(): void {
     return terminals.spawn(cwd, seedPrompt)
   })
 
+  ipcMain.handle('tab:resume', (_e, { cwd, fallbackSeed }) => {
+    if (!terminals) throw new Error('Terminal manager not ready')
+    return terminals.spawnResume(cwd, fallbackSeed)
+  })
+
   ipcMain.handle('terminal:spawn', (_e, { cwd }) => {
     if (!terminals) throw new Error('Terminal manager not ready')
     return terminals.spawnShell(cwd)

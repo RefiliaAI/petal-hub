@@ -31,6 +31,10 @@ const api = {
   // --- terminal tabs ---
   spawnTab: (cwd: string, seedPrompt?: string) =>
     ipcRenderer.invoke('tab:spawn', { cwd, seedPrompt }),
+  // Resume a project's previous conversation (`claude --continue`) when one
+  // exists; otherwise start a fresh session seeded with fallbackSeed.
+  resumeTab: (cwd: string, fallbackSeed?: string) =>
+    ipcRenderer.invoke('tab:resume', { cwd, fallbackSeed }),
   spawnTerminal: (cwd: string) => ipcRenderer.invoke('terminal:spawn', { cwd }),
   writeTab: (id: string, data: string) => ipcRenderer.send('tab:write', { id, data }),
   resizeTab: (id: string, cols: number, rows: number) =>
