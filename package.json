@@ -1,6 +1,6 @@
 {
   "name": "petal-hub",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A cute pastel-pink command center for running Claude Code across many projects",
   "author": "Petal Hub",
   "main": "./out/main/index.js",
