@@ -130,14 +130,19 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       return clampOff(row * c + col)
     }
 
-    // Ctrl+A: highlight the whole current line, spanning wrapped continuation rows.
+    // Ctrl+A: highlight the whole current line. In a normal shell buffer a long
+    // command can wrap across rows, so extend over wrapped continuation rows to grab
+    // the logical line. In the alternate buffer (a TUI like `claude`) wrap flags are
+    // left all over the screen by redraws, so trust only the cursor's own row.
     const selectWholeLine = (): void => {
       const b = term.buffer.active
       const c = cols()
       let startRow = b.baseY + b.cursorY
       let endRow = startRow
-      while (startRow > 0 && b.getLine(startRow)?.isWrapped) startRow--
-      while (endRow + 1 < b.length && b.getLine(endRow + 1)?.isWrapped) endRow++
+      if (b.type === 'normal') {
+        while (startRow > 0 && b.getLine(startRow)?.isWrapped) startRow--
+        while (endRow + 1 < b.length && b.getLine(endRow + 1)?.isWrapped) endRow++
+      }
       anchor = startRow * c
       focus = (endRow + 1) * c
       renderSelection()
