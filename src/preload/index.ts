@@ -50,7 +50,11 @@ const api = {
 
   // --- shell helpers ---
   openPath: (p: string) => ipcRenderer.send('shell:open-path', p),
-  openExternal: (url: string) => ipcRenderer.send('shell:open-external', url)
+  openExternal: (url: string) => ipcRenderer.send('shell:open-external', url),
+
+  // --- clipboard ---
+  readClipboard: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
+  writeClipboard: (text: string) => ipcRenderer.send('clipboard:write', text)
 }
 
 contextBridge.exposeInMainWorld('hub', api)

@@ -61,6 +61,46 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(mountRef.current)
+
+    // Standard clipboard shortcuts. xterm doesn't wire these up itself, so the
+    // raw keystrokes would otherwise reach the pty (e.g. Ctrl+V as a control char).
+    // Returning false tells xterm we handled the event and to swallow it.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown' || !e.ctrlKey) return true
+      const key = e.key.toLowerCase()
+
+      // Paste: Ctrl+V or Ctrl+Shift+V.
+      if (key === 'v') {
+        window.hub.readClipboard().then((text) => {
+          if (text) window.hub.writeTab(id, text)
+        })
+        return false
+      }
+
+      // Copy: Ctrl+Shift+C always copies the selection; plain Ctrl+C copies only
+      // when something is selected, otherwise it passes through as interrupt (SIGINT).
+      if (key === 'c') {
+        const sel = term.getSelection()
+        if (e.shiftKey) {
+          if (sel) window.hub.writeClipboard(sel)
+          return false
+        }
+        if (sel) {
+          window.hub.writeClipboard(sel)
+          term.clearSelection()
+          return false
+        }
+        return true
+      }
+
+      // Select all: Ctrl+Shift+A.
+      if (e.shiftKey && key === 'a') {
+        term.selectAll()
+        return false
+      }
+
+      return true
+    })
     try {
       fit.fit()
     } catch {
