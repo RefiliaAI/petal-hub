@@ -73,10 +73,13 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const cols = (): number => term.cols
     const maxOffset = (): number => term.buffer.active.length * term.cols
     const clampOff = (o: number): number => Math.max(0, Math.min(o, maxOffset()))
-    const cursorOffset = (): number => {
-      const b = term.buffer.active
-      return (b.baseY + b.cursorY) * term.cols + b.cursorX
-    }
+
+    // Tracked cursor: updated after every term.write() (synchronous) so that when a
+    // Shift+Arrow fires, we use the freshest cursor position rather than b.cursorX
+    // which can be stale if pty output is still buffered in the IPC pipe.
+    let trackedCursorX = 0
+    let trackedCursorY = 0
+    const cursorOffset = (): number => trackedCursorY * term.cols + trackedCursorX
     const rowText = (row: number): string =>
       term.buffer.active.getLine(row)?.translateToString(false) ?? ''
     const isWordChar = (ch: string): boolean => /\S/.test(ch)
@@ -130,16 +133,28 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       return clampOff(row * c + col)
     }
 
-    // Ctrl+A: highlight the single row the cursor is on. We deliberately don't try to
-    // join wrapped rows into a logical line: `claude` renders its input box inline in
-    // the normal buffer, so wrap-joining grabs the box's border rows too. One visual
-    // row matches "the line I'm writing".
+    // Ctrl+A: select the typed content on the cursor's row, skipping any leading
+    // prompt chars (e.g. '> ' from the claude TUI, '$ '/'# ' from shells) and
+    // trailing spaces.
     const selectWholeLine = (): void => {
-      const b = term.buffer.active
       const c = cols()
-      const row = b.baseY + b.cursorY
-      anchor = row * c
-      focus = (row + 1) * c
+      const row = trackedCursorY
+      const text = rowText(row)
+
+      // End: last non-space character on the row.
+      let end = c
+      while (end > 0 && (text[end - 1] ?? ' ') === ' ') end--
+
+      // Start: skip any leading prompt marker (last one before the cursor column).
+      let start = 0
+      for (const marker of ['> ', '$ ', '# ']) {
+        const idx = text.lastIndexOf(marker, trackedCursorX)
+        if (idx >= 0) start = Math.max(start, idx + marker.length)
+      }
+      if (start > end) start = end
+
+      anchor = row * c + start
+      focus = row * c + end
       renderSelection()
     }
 
@@ -224,7 +239,12 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const keySub = term.onData((data) => window.hub.writeTab(id, data))
     // pty output → UI.
     const offData = window.hub.onTabData(({ id: tid, data }) => {
-      if (tid === id) term.write(data)
+      if (tid !== id) return
+      term.write(data)
+      // term.write() is synchronous — cursor is updated immediately after.
+      const b = term.buffer.active
+      trackedCursorX = b.cursorX
+      trackedCursorY = b.baseY + b.cursorY
     })
     const offExit = window.hub.onTabExit(({ id: tid }) => {
       if (tid === id) {
