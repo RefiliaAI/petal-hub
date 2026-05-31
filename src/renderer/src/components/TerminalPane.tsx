@@ -69,6 +69,10 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     // for copying. Kept as closure locals so the key handler below shares the state.
     let anchor: number | null = null
     let focus: number | null = null
+    // We extract selected text ourselves (trimming per-row padding) rather than
+    // relying on term.getSelection(), which can return empty after a programmatic
+    // term.select() call in some xterm versions.
+    let selectedText = ''
 
     const cols = (): number => term.cols
     const maxOffset = (): number => term.buffer.active.length * term.cols
@@ -80,9 +84,27 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     let trackedCursorX = 0
     let trackedCursorY = 0
     const cursorOffset = (): number => trackedCursorY * term.cols + trackedCursorX
+
     const rowText = (row: number): string =>
       term.buffer.active.getLine(row)?.translateToString(false) ?? ''
     const isWordChar = (ch: string): boolean => /\S/.test(ch)
+
+    // Read text between two buffer offsets, trimming trailing spaces from each row
+    // so we never copy the blank cell-padding xterm adds to the right of every line.
+    const extractText = (start: number, end: number): string => {
+      const c = cols()
+      const startRow = Math.floor(start / c)
+      const startCol = start % c
+      const endRow = Math.floor(end / c)
+      const endCol = end % c
+      if (startRow === endRow) {
+        return rowText(startRow).substring(startCol, endCol).trimEnd()
+      }
+      const parts = [rowText(startRow).substring(startCol).trimEnd()]
+      for (let r = startRow + 1; r < endRow; r++) parts.push(rowText(r).trimEnd())
+      parts.push(rowText(endRow).substring(0, endCol).trimEnd())
+      return parts.join('\n')
+    }
 
     const ensureVisible = (off: number): void => {
       try {
@@ -98,11 +120,13 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const renderSelection = (): void => {
       if (anchor === null || focus === null || anchor === focus) {
         term.clearSelection()
+        selectedText = ''
         return
       }
       const start = Math.min(anchor, focus)
-      const len = Math.abs(focus - anchor)
-      term.select(start % cols(), Math.floor(start / cols()), len)
+      const end = Math.max(anchor, focus)
+      term.select(start % cols(), Math.floor(start / cols()), end - start)
+      selectedText = extractText(start, end)
       ensureVisible(focus)
     }
 
@@ -161,6 +185,7 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     const clearSel = (): void => {
       anchor = null
       focus = null
+      selectedText = ''
       term.clearSelection()
     }
 
@@ -204,12 +229,13 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
           clearSel()
           return false
         }
-        // Ctrl+Shift+C always copies the selection; plain Ctrl+C copies when something
-        // is selected, otherwise it passes through as interrupt (SIGINT).
+        // Ctrl+C / Ctrl+Shift+C: copy selection if there is one, otherwise pass
+        // through as interrupt (SIGINT). We use our own selectedText rather than
+        // term.getSelection() because the latter can return empty after a programmatic
+        // term.select() call.
         if (lower === 'c') {
-          const sel = term.getSelection()
-          if (sel && (e.shiftKey || sel.length > 0)) {
-            window.hub.writeClipboard(sel)
+          if (selectedText) {
+            window.hub.writeClipboard(selectedText)
             clearSel()
             return false
           }
