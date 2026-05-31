@@ -251,6 +251,18 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
         const mod = key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta'
         if (!mod && !e.shiftKey) clearSel()
       }
+
+      // Plain arrow navigation goes to the pty, which echoes back the new cursor
+      // position asynchronously. If the user presses Shift+Arrow before the echo
+      // arrives, trackedCursorX is stale and the anchor lands in the wrong spot.
+      // Preemptively adjust the tracker by ±1 so it's correct immediately; the pty
+      // echo in onTabData will confirm (or correct) the position.
+      if (isArrow && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+        const c = cols()
+        if (key === 'ArrowLeft') trackedCursorX = Math.max(0, trackedCursorX - 1)
+        else if (key === 'ArrowRight') trackedCursorX = Math.min(c - 1, trackedCursorX + 1)
+      }
+
       return true
     })
     try {
