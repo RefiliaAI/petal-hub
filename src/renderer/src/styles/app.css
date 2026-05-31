@@ -153,6 +153,47 @@
   position: relative;
 }
 
+/* ---------- version footer ---------- */
+.version-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 20px 8px;
+  font-size: 12px;
+  color: var(--text-soft);
+  -webkit-app-region: no-drag;
+}
+.version-footer .vf-current {
+  opacity: 0.7;
+}
+.version-footer .vf-new {
+  color: var(--rose-deep);
+  font-weight: 600;
+}
+.version-footer .vf-error {
+  color: var(--rose-deep);
+  opacity: 0.85;
+}
+.version-footer .vf-update {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  color: var(--white);
+  background: var(--rose-deep);
+  border-radius: var(--radius-md);
+  padding: 3px 12px;
+  box-shadow: var(--shadow-soft);
+}
+.version-footer .vf-update:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.version-footer .vf-update:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* ---------- home / command panel ---------- */
 .home-panel {
   height: 100%;

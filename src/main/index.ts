@@ -8,6 +8,7 @@ import { TerminalManager } from './terminal'
 import { loadSettingsSync, saveSettings, toPublic, type Settings } from './settings'
 import { validateToken, storeGitCredential } from './github'
 import { findProjects } from './projects'
+import { checkForUpdate, downloadAndInstall } from './updates'
 
 let mainWindow: BrowserWindow | null = null
 let terminals: TerminalManager | null = null
@@ -145,6 +146,13 @@ function registerIpc(): void {
 
   // --- clipboard (copy; paste uses the browser's native paste event) ---
   ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
+
+  // --- updates (manual check + install) ---
+  ipcMain.handle('updates:check', () => checkForUpdate())
+  ipcMain.handle('updates:install', async (_e, url: string) => {
+    await downloadAndInstall(url)
+    return true
+  })
 }
 
 app.whenReady().then(() => {

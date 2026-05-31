@@ -57,7 +57,11 @@ const api = {
   openExternal: (url: string) => ipcRenderer.send('shell:open-external', url),
 
   // --- clipboard (copy; paste uses the browser's native paste event) ---
-  writeClipboard: (text: string) => ipcRenderer.send('clipboard:write', text)
+  writeClipboard: (text: string) => ipcRenderer.send('clipboard:write', text),
+
+  // --- updates (manual check + install) ---
+  checkUpdate: () => ipcRenderer.invoke('updates:check'),
+  installUpdate: (url: string) => ipcRenderer.invoke('updates:install', url)
 }
 
 contextBridge.exposeInMainWorld('hub', api)

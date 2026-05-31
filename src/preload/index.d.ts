@@ -38,6 +38,15 @@ export interface ProjectMatch {
   score: number
 }
 
+export interface UpdateInfo {
+  current: string
+  latest: string | null
+  hasUpdate: boolean
+  downloadUrl: string | null
+  releaseUrl: string | null
+  error?: string
+}
+
 export interface TokenInfo {
   ok: boolean
   login?: string
