@@ -2,15 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { fileToImagePayload } from '../lib/images'
-import {
-  clampOffset,
-  extractText,
-  getVisibleCursor,
-  lineSelection,
-  wordLeft,
-  wordRight,
-  type TermGrid
-} from '../lib/terminalSelection'
+import { handleSelectionKey, type SelectionState, type TermGrid } from '../lib/terminalSelection'
 
 interface Props {
   id: string
@@ -74,14 +66,11 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
     // ---- Keyboard text selection (a copy-style highlight, not editing) ----
     // xterm has no built-in keyboard selection — its model is mouse-only — so we track
     // an anchor/focus pair as linear cell offsets and drive term.select(). The pty's
-    // own cursor is untouched; this only highlights cells for copying. The offset math
-    // lives in ../lib/terminalSelection (pure + unit-tested); here we just adapt the
-    // live xterm buffer to its TermGrid view and hold the anchor/focus state.
-    let anchor: number | null = null
-    let focus: number | null = null
-    // We extract selected text ourselves (trimming per-row padding) rather than relying
-    // on term.getSelection(), which can return empty after a programmatic term.select().
-    let selectedText = ''
+    // own cursor is untouched; this only highlights cells for copying. All the logic
+    // lives in ../lib/terminalSelection (pure + tested against the real claude TUI);
+    // here we adapt the live xterm buffer to its TermGrid view, hold the selection
+    // state, and perform the side effects the reducer asks for.
+    const sel: SelectionState = { anchor: null, focus: null, selectedText: '' }
 
     const cols = (): number => term.cols
     const grid = (): TermGrid => {
@@ -96,10 +85,6 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
         isInverse: (row, col) => !!b.getLine(row)?.getCell(col)?.isInverse()
       }
     }
-    const cursorOffset = (): number => {
-      const { col, row } = getVisibleCursor(grid())
-      return row * term.cols + col
-    }
 
     const ensureVisible = (off: number): void => {
       try {
@@ -112,99 +97,53 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       }
     }
 
+    // Sync the xterm highlight to the current selection state.
     const renderSelection = (): void => {
-      if (anchor === null || focus === null || anchor === focus) {
+      if (sel.anchor === null || sel.focus === null || sel.anchor === sel.focus) {
         term.clearSelection()
-        selectedText = ''
         return
       }
-      const start = Math.min(anchor, focus)
-      const end = Math.max(anchor, focus)
+      const start = Math.min(sel.anchor, sel.focus)
+      const end = Math.max(sel.anchor, sel.focus)
       term.select(start % cols(), Math.floor(start / cols()), end - start)
-      selectedText = extractText(grid(), start, end)
-      ensureVisible(focus)
-    }
-
-    // Ctrl+A: select the typed content on the visible cursor's row.
-    const selectWholeLine = (): void => {
-      const sel = lineSelection(grid())
-      anchor = sel.anchor
-      focus = sel.focus
-      renderSelection()
-    }
-
-    const clearSel = (): void => {
-      anchor = null
-      focus = null
-      selectedText = ''
-      term.clearSelection()
+      ensureVisible(sel.focus)
     }
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
-      const key = e.key
-      const lower = key.toLowerCase()
-      const isArrow =
-        key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown'
-
-      // Shift+Arrow extends the selection; add Ctrl to move by whole words.
-      if (e.shiftKey && isArrow) {
-        const g = grid()
-        if (anchor === null) anchor = cursorOffset()
-        let f = focus ?? anchor
-        const c = cols()
-        if (key === 'ArrowRight') f = e.ctrlKey ? wordRight(g, f) : clampOffset(g, f + 1)
-        else if (key === 'ArrowLeft') f = e.ctrlKey ? wordLeft(g, f) : clampOffset(g, f - 1)
-        else if (key === 'ArrowDown') f = clampOffset(g, f + c)
-        else f = clampOffset(g, f - c)
-        focus = f
-        renderSelection()
-        return false
-      }
-
-      if (e.ctrlKey) {
-        // Ctrl+A: select the whole current line.
-        if (lower === 'a' && !e.shiftKey) {
-          selectWholeLine()
+      const effect = handleSelectionKey(
+        sel,
+        { key: e.key, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey },
+        grid()
+      )
+      switch (effect.kind) {
+        case 'render':
+          renderSelection()
           return false
-        }
-        // Ctrl+Shift+A: select the entire buffer.
-        if (lower === 'a' && e.shiftKey) {
+        case 'selectAll':
           term.selectAll()
-          anchor = focus = null
           return false
-        }
-        // Ctrl+V / Ctrl+Shift+V: xterm would send ^V and preventDefault, suppressing
-        // the browser's native paste. Returning false lets that native paste feed the
-        // pty exactly once — don't paste manually too, or it pastes twice.
-        if (lower === 'v') {
-          clearSel()
+        case 'copy':
+          // Write via the Electron main clipboard (reliable) and also the renderer's
+          // async clipboard API as a fallback, in case one path is unavailable.
+          window.hub.writeClipboard(effect.text)
+          void navigator.clipboard?.writeText(effect.text).catch(() => {})
+          term.clearSelection()
           return false
-        }
-        // Ctrl+C / Ctrl+Shift+C: copy selection if there is one, otherwise pass
-        // through as interrupt (SIGINT). We use our own selectedText rather than
-        // term.getSelection() because the latter can return empty after a programmatic
-        // term.select() call.
-        if (lower === 'c') {
-          if (selectedText) {
-            window.hub.writeClipboard(selectedText)
-            clearSel()
-            return false
-          }
-          if (e.shiftKey) return false
+        case 'sendKeys':
+          window.hub.writeTab(id, effect.data)
+          term.clearSelection()
+          return false
+        case 'paste': // native paste feeds the pty; just drop any highlight
+        case 'swallow':
+        case 'cancelPassthrough':
+          term.clearSelection()
+          return effect.kind === 'cancelPassthrough'
+        case 'interrupt':
+        case 'passthrough':
+        default:
           return true
-        }
       }
-
-      // Any other keystroke cancels a stale keyboard selection and is passed to the
-      // pty — but ignore lone modifiers and shifted keys so the selection above can
-      // keep extending across repeated Shift+Arrow presses.
-      if (anchor !== null) {
-        const mod = key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta'
-        if (!mod && !e.shiftKey) clearSel()
-      }
-
-      return true
     })
     try {
       fit.fit()
