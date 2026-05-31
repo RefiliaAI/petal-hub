@@ -69,11 +69,11 @@ export function TerminalPane({ id, active, onExit }: Props): JSX.Element {
       if (e.type !== 'keydown' || !e.ctrlKey) return true
       const key = e.key.toLowerCase()
 
-      // Paste: Ctrl+V or Ctrl+Shift+V.
+      // Paste: Ctrl+V or Ctrl+Shift+V. xterm would normally send ^V as a control
+      // char and preventDefault, which suppresses the browser's native paste.
+      // Returning false skips that, letting the native paste feed the pty exactly
+      // once — don't paste manually here too, or it pastes twice.
       if (key === 'v') {
-        window.hub.readClipboard().then((text) => {
-          if (text) window.hub.writeTab(id, text)
-        })
         return false
       }
 

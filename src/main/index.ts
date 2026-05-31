@@ -138,8 +138,7 @@ function registerIpc(): void {
   ipcMain.on('shell:open-path', (_e, p: string) => shell.openPath(p))
   ipcMain.on('shell:open-external', (_e, url: string) => shell.openExternal(url))
 
-  // --- clipboard (native, reliable regardless of renderer focus/permissions) ---
-  ipcMain.handle('clipboard:read', () => clipboard.readText())
+  // --- clipboard (copy; paste uses the browser's native paste event) ---
   ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
 }
 

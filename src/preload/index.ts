@@ -52,8 +52,7 @@ const api = {
   openPath: (p: string) => ipcRenderer.send('shell:open-path', p),
   openExternal: (url: string) => ipcRenderer.send('shell:open-external', url),
 
-  // --- clipboard ---
-  readClipboard: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
+  // --- clipboard (copy; paste uses the browser's native paste event) ---
   writeClipboard: (text: string) => ipcRenderer.send('clipboard:write', text)
 }
 
