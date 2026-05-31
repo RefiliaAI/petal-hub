@@ -159,6 +159,28 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     termRef.current = term
     fitRef.current = fit
 
+    // Image paste: a screenshot copied to the clipboard arrives as an image item on
+    // the browser's paste event (the same File shape a drop gives us). Persist it to a
+    // temp file and type the path into the live session so Claude can read it — exactly
+    // like onDrop below. Plain-text paste has no image item, so we leave it to xterm.
+    const onPaste = async (e: ClipboardEvent): Promise<void> => {
+      const item = Array.from(e.clipboardData?.items ?? []).find((it) =>
+        it.type.startsWith('image/')
+      )
+      const file = item?.getAsFile()
+      if (!file) return // text (or nothing) → let xterm handle the paste
+      e.preventDefault()
+      try {
+        const payload = await fileToImagePayload(file)
+        const savedPath = await window.hub.saveImage(payload)
+        window.hub.writeTab(id, savedPath + ' ')
+      } catch {
+        /* ignore unreadable clipboard image */
+      }
+    }
+    // Capture phase so we intercept image pastes before xterm's own paste handler.
+    term.textarea?.addEventListener('paste', onPaste, true)
+
     // UI keystrokes → pty.
     const keySub = term.onData((data) => window.hub.writeTab(id, data))
     // pty output → UI.
@@ -178,6 +200,7 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     window.hub.resizeTab(id, c, r)
 
     return () => {
+      term.textarea?.removeEventListener('paste', onPaste, true)
       keySub.dispose()
       offData()
       offExit()
