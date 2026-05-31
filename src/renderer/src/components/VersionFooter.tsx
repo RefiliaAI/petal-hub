@@ -43,7 +43,7 @@ export function VersionFooter(): JSX.Element | null {
     <div className="version-footer">
       {info.hasUpdate ? (
         <>
-          <span className="vf-new">✨ v{info.latest} available</span>
+          <span className="vf-new">🌷 v{info.latest} available</span>
           {error && <span className="vf-error">{error}</span>}
           <button className="vf-update" onClick={update} disabled={installing}>
             {installing ? 'Updating…' : 'Update 🌸'}
