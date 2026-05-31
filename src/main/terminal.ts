@@ -67,8 +67,25 @@ export class TerminalManager {
   private seq = 0
   private claudePath = resolveClaude()
   private pwshPath = resolvePwsh()
+  private disposed = false
 
   constructor(private sender: WebContents) {}
+
+  /**
+   * Forward an event to the renderer, but only if it can still receive it.
+   * Killing a pty flushes a final burst of data/exit events asynchronously;
+   * by the time those land on quit, the BrowserWindow's webContents may already
+   * be destroyed — calling .send() then throws "Object has been destroyed" as an
+   * uncaught exception (Electron pops an error dialog). Guard every send.
+   */
+  private emit(channel: string, payload: unknown): void {
+    if (this.disposed || this.sender.isDestroyed()) return
+    try {
+      this.sender.send(channel, payload)
+    } catch {
+      /* webContents torn down mid-send */
+    }
+  }
 
   /** Open a tab running an interactive `claude` session (optionally seeded). */
   spawn(cwd: string, seedPrompt?: string): { id: string } {
@@ -99,7 +116,7 @@ export class TerminalManager {
 
     let seedTimer: NodeJS.Timeout | null = null
     proc.onData((data) => {
-      this.sender.send('tab:data', { id, data })
+      this.emit('tab:data', { id, data })
       // Seed once: wait for the REPL to settle after first output.
       if (seedPrompt && !session.seeded) {
         session.seeded = true
@@ -112,7 +129,7 @@ export class TerminalManager {
     proc.onExit(({ exitCode }) => {
       if (seedTimer) clearTimeout(seedTimer)
       this.sessions.delete(id)
-      this.sender.send('tab:exit', { id, exitCode })
+      this.emit('tab:exit', { id, exitCode })
     })
 
     return { id }
@@ -145,6 +162,9 @@ export class TerminalManager {
   }
 
   disposeAll(): void {
+    // Stop forwarding before we start killing — pty death throws one last
+    // data/exit burst we must not relay to a dying webContents.
+    this.disposed = true
     for (const id of [...this.sessions.keys()]) this.close(id)
   }
 }
