@@ -159,6 +159,23 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     termRef.current = term
     fitRef.current = fit
 
+    // xterm measures the character-cell size once at first paint. If that happens
+    // before the page's web fonts (Shantell Sans via @fontsource) have settled,
+    // glyphs are laid out with stale metrics and render overlapped/jumbled until
+    // the next repaint — which is why scrolling or selecting silently fixes it.
+    // Once fonts are ready, refit and force a full repaint with correct metrics.
+    void document.fonts?.ready.then(() => {
+      const t = termRef.current
+      const f = fitRef.current
+      if (!t || !f) return
+      try {
+        f.fit()
+        t.refresh(0, t.rows - 1)
+      } catch {
+        /* not visible yet */
+      }
+    })
+
     // Image paste: a screenshot copied to the clipboard arrives as an image item on
     // the browser's paste event (the same File shape a drop gives us). Persist it to a
     // temp file and type the path into the live session so Claude can read it — exactly
@@ -218,6 +235,10 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       if (!fit || !term) return
       try {
         fit.fit()
+        // fit() only repaints when the dimensions actually change; force a full
+        // repaint too so a stale first-paint (wrong font metrics) is corrected
+        // when the pane becomes visible, not only on scroll/selection.
+        term.refresh(0, term.rows - 1)
         window.hub.resizeTab(id, term.cols, term.rows)
         term.focus()
       } catch {
