@@ -72,14 +72,18 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       theme: {
         background: '#fff7fb',
         foreground: '#5c3a4d',
-        // claude (the TUI) draws its own block cursor and leaves the real terminal
-        // cursor parked at the wrong spot, so we hide xterm's cursor for claude tabs
-        // (transparent block, foreground accent so the underlying char stays normal).
-        // Shell tabs keep the real pink cursor.
-        cursor: kind === 'shell' ? '#ff5fa8' : 'transparent',
-        cursorAccent: kind === 'shell' ? '#fff7fb' : '#5c3a4d',
-        selectionBackground: '#ffcfe6',
-        selectionForeground: '#4a2d3d',
+        // A visible pink cursor in every tab. We used to set 'transparent' for
+        // claude tabs (claude draws its own cursor), but the canvas renderer
+        // doesn't honor a transparent cursor — it rendered a hard-to-see white
+        // block — so give it a real on-brand pink instead. cursorAccent is the
+        // colour of the glyph sitting under the block, kept light for contrast.
+        cursor: '#ff5fa8',
+        cursorAccent: '#fff7fb',
+        // Deeper pink so the selection rectangle is clearly visible on the
+        // near-white terminal background — the canvas renderer draws selection
+        // a touch translucent, which washed the old light pink out to near-white.
+        selectionBackground: '#ff89bd',
+        selectionForeground: '#3a2230',
         black: '#5c3a4d',
         red: '#d6336c',
         green: '#2f9e6f',
