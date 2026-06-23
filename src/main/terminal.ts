@@ -39,6 +39,26 @@ function resolveClaude(): string {
   return 'claude.cmd'
 }
 
+/** Resolve the OpenSSH client. node-pty needs a full path (no PATH lookup). */
+function resolveSsh(): string {
+  // Prefer the Windows built-in OpenSSH (plays well with conpty + Windows paths).
+  const winSsh = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32',
+    'OpenSSH',
+    'ssh.exe'
+  )
+  if (existsSync(winSsh)) return winSsh
+  try {
+    const found = execSync('where ssh', { windowsHide: true }).toString().split(/\r?\n/)
+    const exe = found.map((l) => l.trim()).find((l) => l.toLowerCase().endsWith('ssh.exe'))
+    if (exe && existsSync(exe)) return exe
+  } catch {
+    /* fall through */
+  }
+  return 'ssh.exe'
+}
+
 /** Resolve a PowerShell executable — prefer PowerShell 7 (pwsh), else Windows PowerShell. */
 function resolvePwsh(): string {
   try {
@@ -69,6 +89,7 @@ export class TerminalManager {
   private seq = 0
   private claudePath = resolveClaude()
   private pwshPath = resolvePwsh()
+  private sshPath = resolveSsh()
   private disposed = false
 
   constructor(private sender: WebContents) {}
@@ -134,7 +155,7 @@ export class TerminalManager {
       'StrictHostKeyChecking=accept-new', // trust an unknown host on first connect
       `${remote.user}@${remote.host}`
     ]
-    const proc = ptyLib.spawn('ssh', args, {
+    const proc = ptyLib.spawn(this.sshPath, args, {
       name: 'xterm-color',
       cols: 80,
       rows: 24,
