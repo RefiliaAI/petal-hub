@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import { fileToImagePayload } from '../lib/images'
 import { handleSelectionKey, type SelectionState, type TermGrid } from '../lib/terminalSelection'
 
@@ -59,7 +60,10 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       fontFamily: "'Cascadia Code', 'Consolas', monospace",
       fontSize: 14,
       lineHeight: 1.2,
-      letterSpacing: 0.2,
+      // No fractional letterSpacing: with per-row layout it accumulates rounding
+      // drift that can overlap glyphs on a redrawn line. Integer (0) keeps the
+      // canvas renderer's fixed-cell grid exact.
+      letterSpacing: 0,
       cursorBlink: kind === 'shell',
       allowProposedApi: true,
       // Light pastel theme. ANSI colors are tuned to stay legible on a near-white
@@ -97,6 +101,19 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(mountRef.current)
+
+    // Use the canvas renderer instead of xterm's default DOM renderer. The DOM
+    // renderer lays each row out as text and lets the browser position glyphs,
+    // which intermittently drifts — a single mid-screen line the TUI rewrites in
+    // place could render with overlapping characters until the next full repaint
+    // (scroll/select) healed it. The canvas renderer paints every cell at an
+    // exact grid coordinate, so glyphs can't overflow their cell. If the 2D
+    // context is somehow unavailable, xterm keeps the DOM renderer.
+    try {
+      term.loadAddon(new CanvasAddon())
+    } catch {
+      /* fall back to the DOM renderer */
+    }
 
     // ---- Keyboard text selection (a copy-style highlight, not editing) ----
     // xterm has no built-in keyboard selection — its model is mouse-only — so we track
