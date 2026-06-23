@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import { fileToImagePayload } from '../lib/images'
 import { handleSelectionKey, type SelectionState, type TermGrid } from '../lib/terminalSelection'
 
@@ -23,6 +24,35 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
   const [dead, setDead] = useState(false)
   const [dragover, setDragover] = useState(false)
 
+  // Force xterm to RE-MEASURE the character cell, then refit + repaint.
+  //
+  // xterm measures the cell size once and caches it. The cache goes stale when
+  // the terminal is first painted before its font/layout has settled (web-font
+  // timing) or while the pane is hidden (display:none → 0×0 → bad measure),
+  // producing overlapped/jumbled glyphs that only heal on the next full render —
+  // which is why scrolling or selecting silently fixed it.
+  //
+  // Crucially, neither fit() nor refresh() re-measures: refresh() repaints with
+  // the cached (wrong) cell size, and fit() only resizes when cols/rows actually
+  // change. The reliable way to force a re-measure in xterm 5.x is to change a
+  // font option, so we briefly nudge fontSize to trigger CharSizeService, then
+  // restore it and refit. Skipped while hidden (no width) so we never cache a
+  // zero-size measurement.
+  const remeasure = useCallback((): void => {
+    const term = termRef.current
+    const fit = fitRef.current
+    if (!term || !mountRef.current?.clientWidth) return
+    try {
+      const size = term.options.fontSize ?? 14
+      term.options.fontSize = size + 1
+      term.options.fontSize = size
+      fit?.fit()
+      term.refresh(0, term.rows - 1)
+    } catch {
+      /* terminal not ready / not visible */
+    }
+  }, [])
+
   // Create the terminal once.
   useEffect(() => {
     if (!mountRef.current) return
@@ -30,7 +60,10 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       fontFamily: "'Cascadia Code', 'Consolas', monospace",
       fontSize: 14,
       lineHeight: 1.2,
-      letterSpacing: 0.2,
+      // No fractional letterSpacing: with per-row layout it accumulates rounding
+      // drift that can overlap glyphs on a redrawn line. Integer (0) keeps the
+      // canvas renderer's fixed-cell grid exact.
+      letterSpacing: 0,
       cursorBlink: kind === 'shell',
       allowProposedApi: true,
       // Light pastel theme. ANSI colors are tuned to stay legible on a near-white
@@ -39,14 +72,18 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       theme: {
         background: '#fff7fb',
         foreground: '#5c3a4d',
-        // claude (the TUI) draws its own block cursor and leaves the real terminal
-        // cursor parked at the wrong spot, so we hide xterm's cursor for claude tabs
-        // (transparent block, foreground accent so the underlying char stays normal).
-        // Shell tabs keep the real pink cursor.
-        cursor: kind === 'shell' ? '#ff5fa8' : 'transparent',
-        cursorAccent: kind === 'shell' ? '#fff7fb' : '#5c3a4d',
-        selectionBackground: '#ffcfe6',
-        selectionForeground: '#4a2d3d',
+        // A visible pink cursor in every tab. We used to set 'transparent' for
+        // claude tabs (claude draws its own cursor), but the canvas renderer
+        // doesn't honor a transparent cursor — it rendered a hard-to-see white
+        // block — so give it a real on-brand pink instead. cursorAccent is the
+        // colour of the glyph sitting under the block, kept light for contrast.
+        cursor: '#ff5fa8',
+        cursorAccent: '#fff7fb',
+        // Deeper pink so the selection rectangle is clearly visible on the
+        // near-white terminal background — the canvas renderer draws selection
+        // a touch translucent, which washed the old light pink out to near-white.
+        selectionBackground: '#ff89bd',
+        selectionForeground: '#3a2230',
         black: '#5c3a4d',
         red: '#d6336c',
         green: '#2f9e6f',
@@ -68,6 +105,19 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(mountRef.current)
+
+    // Use the canvas renderer instead of xterm's default DOM renderer. The DOM
+    // renderer lays each row out as text and lets the browser position glyphs,
+    // which intermittently drifts — a single mid-screen line the TUI rewrites in
+    // place could render with overlapping characters until the next full repaint
+    // (scroll/select) healed it. The canvas renderer paints every cell at an
+    // exact grid coordinate, so glyphs can't overflow their cell. If the 2D
+    // context is somehow unavailable, xterm keeps the DOM renderer.
+    try {
+      term.loadAddon(new CanvasAddon())
+    } catch {
+      /* fall back to the DOM renderer */
+    }
 
     // ---- Keyboard text selection (a copy-style highlight, not editing) ----
     // xterm has no built-in keyboard selection — its model is mouse-only — so we track
@@ -159,22 +209,15 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     termRef.current = term
     fitRef.current = fit
 
-    // xterm measures the character-cell size once at first paint. If that happens
-    // before the page's web fonts (Shantell Sans via @fontsource) have settled,
-    // glyphs are laid out with stale metrics and render overlapped/jumbled until
-    // the next repaint — which is why scrolling or selecting silently fixes it.
-    // Once fonts are ready, refit and force a full repaint with correct metrics.
-    void document.fonts?.ready.then(() => {
-      const t = termRef.current
-      const f = fitRef.current
-      if (!t || !f) return
-      try {
-        f.fit()
-        t.refresh(0, t.rows - 1)
-      } catch {
-        /* not visible yet */
-      }
-    })
+    // Settle the initial render: force a re-measure once fonts are ready and the
+    // terminal font has actually loaded, plus timed fallbacks for engines that
+    // resolve fonts.ready before the monospace face is ready or before layout
+    // has settled. remeasure() no-ops while the pane is hidden, and the
+    // visibility effect re-measures again when the tab is first shown.
+    void document.fonts?.ready.then(remeasure)
+    void document.fonts?.load('14px "Cascadia Code"').then(remeasure).catch(() => {})
+    const settle1 = setTimeout(remeasure, 150)
+    const settle2 = setTimeout(remeasure, 600)
 
     // Image paste: a screenshot copied to the clipboard arrives as an image item on
     // the browser's paste event (the same File shape a drop gives us). Persist it to a
@@ -217,6 +260,8 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
     window.hub.resizeTab(id, c, r)
 
     return () => {
+      clearTimeout(settle1)
+      clearTimeout(settle2)
       term.textarea?.removeEventListener('paste', onPaste, true)
       keySub.dispose()
       offData()
@@ -235,16 +280,16 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       if (!fit || !term) return
       try {
         fit.fit()
-        // fit() only repaints when the dimensions actually change; force a full
-        // repaint too so a stale first-paint (wrong font metrics) is corrected
-        // when the pane becomes visible, not only on scroll/selection.
-        term.refresh(0, term.rows - 1)
         window.hub.resizeTab(id, term.cols, term.rows)
         term.focus()
       } catch {
         /* ignore */
       }
     }
+    // Becoming visible is the moment a tab that was opened in the background
+    // (hidden → 0×0, so its first measurement was bad) finally has real
+    // dimensions, so force a re-measure now — not just a refit.
+    remeasure()
     const raf = requestAnimationFrame(refit)
     const ro = new ResizeObserver(refit)
     if (mountRef.current) ro.observe(mountRef.current)
@@ -254,7 +299,7 @@ export function TerminalPane({ id, active, onExit, kind = 'claude' }: Props): JS
       ro.disconnect()
       window.removeEventListener('resize', refit)
     }
-  }, [active, id])
+  }, [active, id, remeasure])
 
   const onDrop = async (e: React.DragEvent): Promise<void> => {
     e.preventDefault()
