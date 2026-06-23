@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { parseIntent, slugify } from '../lib/intent'
 import { fileToImagePayload } from '../lib/images'
-import type { CreateProjectResult, ProjectMatch } from '../../../preload/index.d'
+import type { CreateProjectResult, ProjectMatch, PublicRemote } from '../../../preload/index.d'
 
 interface Attachment {
   name: string
@@ -14,16 +14,20 @@ type Phase = 'compose' | 'confirm' | 'creating' | 'done' | 'error' | 'open-confi
 interface Props {
   canScaffold: boolean
   projectsRoot: string
+  remotes: PublicRemote[]
   onProjectCreated: (result: CreateProjectResult) => void
   onOpenProject: (dir: string, title: string) => void
+  onOpenRemote: (remote: PublicRemote) => void
   onOpenTerminal: () => void
 }
 
 export function CommandBar({
   canScaffold,
   projectsRoot,
+  remotes,
   onProjectCreated,
   onOpenProject,
+  onOpenRemote,
   onOpenTerminal
 }: Props): JSX.Element {
   const [text, setText] = useState('')
@@ -82,6 +86,16 @@ export function CommandBar({
       setPhase('confirm')
     } else if (parsed.kind === 'open') {
       setError('')
+      // A saved remote wins over a local folder of the same name: "open RefiliaAI"
+      // should SSH in, not look for a local D:\Projects\RefiliaAI.
+      const q = normalizeLoose(parsed.query)
+      const remote = remotes.find((r) => normalizeLoose(r.name) === q)
+      if (remote) {
+        onOpenRemote(remote)
+        setText('')
+        reset()
+        return
+      }
       setOpenQuery(parsed.query)
       const found = await window.hub.findProject(parsed.query)
       setMatches(found)

@@ -556,6 +556,27 @@
   padding: 6px 12px;
   font-size: 12px;
 }
+/* remote (SSH) project cards in Settings */
+.remote-card {
+  background: var(--blush);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.remote-card .remote-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.remote-card .remote-grid .remote-path {
+  grid-column: 1 / -1;
+}
+.remote-card .btn.ghost.small {
+  align-self: flex-end;
+}
 .seg {
   display: inline-flex;
   background: var(--blush);
