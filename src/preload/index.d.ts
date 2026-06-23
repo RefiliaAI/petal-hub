@@ -23,6 +23,15 @@ export interface CreateProjectResult {
   seedPrompt: string
 }
 
+export interface PublicRemote {
+  id: string
+  name: string
+  host: string
+  user: string
+  remotePath: string
+  hasPassword: boolean
+}
+
 export interface PublicSettings {
   hasToken: boolean
   tokenMasked: string
@@ -30,6 +39,7 @@ export interface PublicSettings {
   projectsRoot: string
   repoVisibility: 'public' | 'private'
   collaborators: string[]
+  remotes: PublicRemote[]
 }
 
 export interface ProjectMatch {

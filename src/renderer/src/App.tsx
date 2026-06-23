@@ -5,7 +5,12 @@ import { TerminalPane } from './components/TerminalPane'
 import { CommandBar } from './components/CommandBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { VersionFooter } from './components/VersionFooter'
-import type { CreateProjectResult, DoctorReport, PublicSettings } from '../../preload/index.d'
+import type {
+  CreateProjectResult,
+  DoctorReport,
+  PublicRemote,
+  PublicSettings
+} from '../../preload/index.d'
 
 export function App(): JSX.Element {
   const [report, setReport] = useState<DoctorReport | null>(null)
@@ -59,6 +64,16 @@ export function App(): JSX.Element {
     [openTab]
   )
 
+  const handleOpenRemote = useCallback(async (remote: PublicRemote) => {
+    try {
+      const { id } = await window.hub.spawnRemote(remote.id)
+      setTabs((t) => [...t, { id, title: `🌐 ${remote.name}`, kind: 'claude' }])
+      setTimeout(() => setActiveId(id), 200)
+    } catch {
+      /* ssh unavailable / unknown remote */
+    }
+  }, [])
+
   const handleOpenTerminal = useCallback(async () => {
     try {
       const { id } = await window.hub.spawnTerminal(settings?.projectsRoot ?? '')
@@ -103,8 +118,10 @@ export function App(): JSX.Element {
           <CommandBar
             canScaffold={report?.canScaffold ?? true}
             projectsRoot={settings?.projectsRoot ?? 'D:\\Projects'}
+            remotes={settings?.remotes ?? []}
             onProjectCreated={handleProjectCreated}
             onOpenProject={handleOpenProject}
+            onOpenRemote={handleOpenRemote}
             onOpenTerminal={handleOpenTerminal}
           />
         )}

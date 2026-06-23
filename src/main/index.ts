@@ -5,7 +5,7 @@ import os from 'os'
 import { runDoctor } from './doctor'
 import { createProject } from './scaffolder'
 import { TerminalManager } from './terminal'
-import { loadSettingsSync, saveSettings, toPublic, type Settings } from './settings'
+import { loadSettingsSync, saveSettings, saveRemotes, toPublic, type Settings } from './settings'
 import { validateToken, storeGitCredential } from './github'
 import { findProjects } from './projects'
 import { checkForUpdate, downloadAndInstall } from './updates'
@@ -136,6 +136,19 @@ function registerIpc(): void {
   ipcMain.handle('terminal:spawn', (_e, { cwd }) => {
     if (!terminals) throw new Error('Terminal manager not ready')
     return terminals.spawnShell(cwd)
+  })
+
+  // Open an SSH tab for a saved remote. The renderer passes only the remote's
+  // id; the password is looked up here and never leaves the main process.
+  ipcMain.handle('tab:remote', (_e, remoteId: string) => {
+    if (!terminals) throw new Error('Terminal manager not ready')
+    const remote = loadSettingsSync().remotes.find((r) => r.id === remoteId)
+    if (!remote) throw new Error('Unknown remote')
+    return terminals.spawnRemote(remote)
+  })
+
+  ipcMain.handle('settings:save-remotes', async (_e, remotes) => {
+    return toPublic(await saveRemotes(remotes))
   })
 
   ipcMain.on('tab:write', (_e, { id, data }) => terminals?.write(id, data))

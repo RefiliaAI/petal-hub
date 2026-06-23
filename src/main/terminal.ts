@@ -9,6 +9,7 @@ import path from 'path'
 import os from 'os'
 import type { WebContents } from 'electron'
 import { hasClaudeHistory } from './history'
+import type { RemoteProject } from './settings'
 
 // Lazy import so the app still launches if the native module failed to load.
 // node-pty ships N-API prebuilds (ABI-stable across Node & Electron) so no
@@ -36,6 +37,26 @@ function resolveClaude(): string {
   }
   // 3) Last resort: let conpty resolve it from PATH.
   return 'claude.cmd'
+}
+
+/** Resolve the OpenSSH client. node-pty needs a full path (no PATH lookup). */
+function resolveSsh(): string {
+  // Prefer the Windows built-in OpenSSH (plays well with conpty + Windows paths).
+  const winSsh = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32',
+    'OpenSSH',
+    'ssh.exe'
+  )
+  if (existsSync(winSsh)) return winSsh
+  try {
+    const found = execSync('where ssh', { windowsHide: true }).toString().split(/\r?\n/)
+    const exe = found.map((l) => l.trim()).find((l) => l.toLowerCase().endsWith('ssh.exe'))
+    if (exe && existsSync(exe)) return exe
+  } catch {
+    /* fall through */
+  }
+  return 'ssh.exe'
 }
 
 /** Resolve a PowerShell executable — prefer PowerShell 7 (pwsh), else Windows PowerShell. */
@@ -68,6 +89,7 @@ export class TerminalManager {
   private seq = 0
   private claudePath = resolveClaude()
   private pwshPath = resolvePwsh()
+  private sshPath = resolveSsh()
   private disposed = false
 
   constructor(private sender: WebContents) {}
@@ -110,6 +132,80 @@ export class TerminalManager {
   spawnShell(cwd: string): { id: string } {
     const dir = cwd && existsSync(cwd) ? cwd : os.homedir()
     return this.launch(this.pwshPath, ['-NoLogo'], dir)
+  }
+
+  /**
+   * Open a tab SSH'd into a remote machine, resuming Claude there.
+   *
+   * The native Windows `ssh` client can't take a password as a flag, so we run
+   * it in a real PTY and auto-type the stored password when its prompt appears
+   * (and auto-accept the host key on first connect via accept-new). Once logged
+   * in we cd into the remote project path and run `claude --continue`. Timed
+   * sends rather than prompt-detection, so it's shell-agnostic (cmd/PowerShell).
+   *
+   * The password is only ever written INTO the pty (ssh hides it; it is never
+   * echoed back), so it never reaches the renderer or any log.
+   */
+  spawnRemote(remote: RemoteProject): { id: string } {
+    const ptyLib = loadPty()
+    const id = `tab-${++this.seq}`
+    const args = [
+      '-tt', // force a PTY even though our stdin isn't a terminal to ssh
+      '-o',
+      'StrictHostKeyChecking=accept-new', // trust an unknown host on first connect
+      `${remote.user}@${remote.host}`
+    ]
+    const proc = ptyLib.spawn(this.sshPath, args, {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 24,
+      cwd: os.homedir(),
+      env: { ...process.env } as Record<string, string>,
+      useConpty: true
+    })
+
+    const session: Session = { id, proc, seeded: false }
+    this.sessions.set(id, session)
+
+    let sentPassword = false
+    let sentInit = false
+    let recent = ''
+    const timers: NodeJS.Timeout[] = []
+
+    const sendInit = (): void => {
+      if (sentInit || !this.sessions.has(id)) return
+      sentInit = true
+      // cd works in both cmd and PowerShell (same drive). Then resume Claude.
+      proc.write(`cd "${remote.remotePath}"\r`)
+      timers.push(
+        setTimeout(() => {
+          if (this.sessions.has(id)) proc.write('claude --continue\r')
+        }, 700)
+      )
+    }
+
+    proc.onData((data) => {
+      this.emit('tab:data', { id, data })
+      if (!sentPassword) {
+        // Keep a small rolling window so the prompt matches across chunks.
+        recent = (recent + data).slice(-200)
+        if (/password:/i.test(recent)) {
+          sentPassword = true
+          recent = ''
+          proc.write(remote.password + '\r')
+          // Give the remote shell a moment to come up, then run the init.
+          timers.push(setTimeout(sendInit, 1800))
+        }
+      }
+    })
+
+    proc.onExit(({ exitCode }) => {
+      timers.forEach(clearTimeout)
+      this.sessions.delete(id)
+      this.emit('tab:exit', { id, exitCode })
+    })
+
+    return { id }
   }
 
   private launch(file: string, args: string[], cwd: string, seedPrompt?: string): { id: string } {

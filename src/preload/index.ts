@@ -23,6 +23,17 @@ const api = {
   saveToken: (token: string) => ipcRenderer.invoke('settings:save-token', token),
   clearToken: () => ipcRenderer.invoke('settings:clear-token'),
   testGitHub: () => ipcRenderer.invoke('github:test'),
+  // Save the remotes list. Each remote's password may be '' to keep the stored one.
+  saveRemotes: (
+    remotes: {
+      id?: string
+      name: string
+      host: string
+      user: string
+      remotePath: string
+      password?: string
+    }[]
+  ) => ipcRenderer.invoke('settings:save-remotes', remotes),
 
   // --- screenshots ---
   saveImage: (payload: { name: string; dataUrl?: string; sourcePath?: string }) =>
@@ -36,6 +47,8 @@ const api = {
   resumeTab: (cwd: string, fallbackSeed?: string) =>
     ipcRenderer.invoke('tab:resume', { cwd, fallbackSeed }),
   spawnTerminal: (cwd: string) => ipcRenderer.invoke('terminal:spawn', { cwd }),
+  // Open an SSH tab for a saved remote (by id; the password stays in main).
+  spawnRemote: (remoteId: string) => ipcRenderer.invoke('tab:remote', remoteId),
   writeTab: (id: string, data: string) => ipcRenderer.send('tab:write', { id, data }),
   resizeTab: (id: string, cols: number, rows: number) =>
     ipcRenderer.send('tab:resize', { id, cols, rows }),
