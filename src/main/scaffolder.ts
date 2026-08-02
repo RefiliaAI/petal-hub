@@ -78,6 +78,13 @@ This project uses **GitHub** (remote: ${remote}). Follow this branch-based flow 
 
 \`main\` must always reflect verified, working code. Keep this file up to date as the
 project's source of truth.
+
+## GitHub authentication
+\`git push\`/\`pull\` already work with no setup — Petal Hub registered the token with
+Git Credential Manager when this project was created. For anything that needs the
+**GitHub REST API directly** (creating a release, uploading a release asset, inviting a
+collaborator, etc.), read the token from \`%APPDATA%\\petal-hub\\settings.json\` →
+\`githubToken\` field. Never print, commit, or otherwise persist the token elsewhere.
 `
 }
 
